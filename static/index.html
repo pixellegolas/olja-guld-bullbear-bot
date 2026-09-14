@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avanza Bot V3</title>
+<style>
+:root{--bg:#0a0a0f;--card:#15151f;--card2:#1c1c2a;--text:#f5f5f7;--muted:#8b8fa3;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--border:#222236;--banner:#f59e0b}
+[data-theme="light"]{--bg:#f1f5f9;--card:#ffffff;--card2:#f8fafc;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--banner:#f59e0b}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;transition:all 0.3s ease;padding-bottom:100px}
+.banner{background:var(--banner);color:#000;text-align:center;padding:8px 12px;font-weight:800;font-size:12px;letter-spacing:0.3px}
+.header{padding:18px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)}
+.logo{font-weight:900;font-size:18px;letter-spacing:-0.5px}
+.muted{color:var(--muted);font-size:11px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:14px;margin:10px 12px}
+.kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 12px}
+.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:14px;text-align:center}
+.kpi-num{font-size:26px;font-weight:900;font-family:monospace}
+.kpi-label{font-size:10px;color:var(--muted);letter-spacing:0.5px;margin-top:4px;text-transform:uppercase}
+.perf{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin:10px 12px}
+.perf-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.perf-title{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
+.perf-pl{background:var(--green);color:#000;padding:4px 10px;border-radius:999px;font-weight:800;font-size:12px;font-family:monospace}
+.perf-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.perf-box{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:12px;text-align:center}
+.perf-box-num{font-size:22px;font-weight:900}
+.perf-box-label{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase}
+.next-entry{background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:14px;padding:12px;margin-top:12px}
+.next-entry-title{color:var(--blue);font-weight:800;font-size:13px;display:flex;align-items:center;gap:6px}
+.btn{padding:10px 16px;border-radius:12px;border:none;font-weight:800;cursor:pointer;font-size:12px}
+.btn-green{background:var(--green);color:#000}
+.btn-yellow{background:var(--yellow);color:#000}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-row{position:fixed;bottom:14px;right:14px;display:flex;flex-direction:column;gap:8px;z-index:100}
+.toggle{position:fixed;top:40px;right:14px;z-index:101;background:var(--card);border:1px solid var(--border);border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:800;font-size:12px}
+.news-item{padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.news-item:last-child{border:none}
+</style>
+</head>
+<body>
+<div class="banner" id="banner">🧪 DEMO V3 - Budget <span id="bannerBudget">10000</span>kr - Courtage + Max förlust + Riktiga nyheter + Tema</div>
+<button class="toggle" id="themeToggle" onclick="toggleTheme()">🌙 Mörkt</button>
+<div class="header">
+<div><div class="logo" id="logoTitle">OLJA GULD BULL BEAR BOT</div><div class="muted" id="statusText">Laddar...</div></div>
+<div style="text-align:right"><div style="background:var(--green);color:#000;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800">DEMO LIVE</div><div class="muted" style="margin-top:4px" id="timeText">--:--</div></div>
+</div>
+
+<div class="kpi">
+<div class="kpi-card"><div class="muted">BUDGET</div><div class="kpi-num" id="budgetNum">10000kr</div></div>
+<div class="kpi-card"><div class="muted">P/L EFTER COURTAGE</div><div class="kpi-num" id="plNum">0kr</div></div>
+<div class="kpi-card"><div class="muted">WIN RATE EFTER</div><div class="kpi-num" id="wrNum">0%</div></div>
+<div class="kpi-card"><div class="muted">DAILY / MAX</div><div class="kpi-num" style="font-size:18px" id="dailyNum">0 / -500kr</div></div>
+</div>
+
+<div class="perf" id="perfSection">
+<div class="perf-head">
+<div class="perf-title">📈 Prestanda idag - Olja Guld Bull Bear</div>
+<div class="perf-pl" id="perfPL">+0 SEK</div>
+</div>
+<div class="perf-grid">
+<div class="perf-box"><div class="perf-box-num" id="perfWins">0</div><div class="perf-box-label">Vinster</div></div>
+<div class="perf-box"><div class="perf-box-num" id="perfLosses">0</div><div class="perf-box-label">Förluster</div></div>
+<div class="perf-box"><div class="perf-box-num" id="perfHit" style="color:var(--green)">0%</div><div class="perf-box-label">Träff</div></div>
+</div>
+<div class="next-entry" id="nextEntry">
+<div class="next-entry-title">🚀 Vald Bull/Bear: <span id="chosenRocket">-</span></div>
+<div class="muted" style="margin-top:6px;font-size:12px" id="nextEntryText">Ingen raket vald just nu - inväntar nästa scan 09:15 om volym kvarstår. Storlek: <span id="entrySize">2000 kr (20%)</span></div>
+</div>
+</div>
+
+<div class="card"><div style="font-weight:800;margin-bottom:8px">🚀 Bull/Bear signaler (Olja, Guld, OMX, Nasdaq, Tesla, Nvidia)</div><div id="raketer" style="font-size:13px">Laddar...</div></div>
+<div class="card"><div style="font-weight:800;margin-bottom:8px">📰 Riktiga nyheter (Yahoo Finance + Trump/olje-filter)</div><div id="news">Hämtar riktiga nyheter...</div></div>
+<div class="card"><div style="font-weight:800;margin-bottom:8px">📊 Trades (senaste)</div><div id="trades" style="font-size:12px;font-family:monospace">Laddar...</div></div>
+<div class="card"><div style="font-weight:800;margin-bottom:8px">💸 Courtage info</div><div id="courtage" style="font-size:11px" class="muted">Laddar...</div></div>
+
+<div class="btn-row">
+<button class="btn btn-green" onclick="fetch('/api/test-telegram').then(r=>r.json()).then(d=>alert('Telegram skickat!'))">📲 Test Telegram</button>
+<button class="btn btn-yellow" onclick="fetch('/api/portfolio').then(r=>r.json()).then(d=>alert('P/L efter: '+d.total_pnl_after.toFixed(1)+'kr\nWR: '+d.win_rate_after.toFixed(0)+'%\nDaily: '+d.daily_pnl.toFixed(1)+'kr'))">📊 Effektivitet</button>
+<button class="btn btn-blue" onclick="fetch('/api/scan-now').then(r=>r.json()).then(d=>{load();})">🔍 Scan nu</button>
+</div>
+
+<script>
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme');
+  const next=cur==='light'?'dark':'light';
+  document.documentElement.setAttribute('data-theme',next);
+  localStorage.setItem('theme',next);
+  document.getElementById('themeToggle').innerText=next==='light'?'☀️ Ljust':'🌙 Mörkt';
+}
+(function(){
+  const saved=localStorage.getItem('theme')||'dark';
+  document.documentElement.setAttribute('data-theme',saved);
+  document.getElementById('themeToggle').innerText=saved==='light'?'☀️ Ljust':'🌙 Mörkt';
+})();
+
+async function load(){
+  try{
+    const s=await fetch('/api/status').then(r=>r.json());
+    const p=s.portfolio;
+    document.getElementById('bannerBudget').innerText=s.budget;
+    document.getElementById('budgetNum').innerText=s.budget+'kr';
+    document.getElementById('statusText').innerText=s.status;
+    document.getElementById('timeText').innerText=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
+    // P/L
+    const plAfter=p.total_pnl_after||0;
+    document.getElementById('plNum').innerText=plAfter.toFixed(0)+'kr';
+    document.getElementById('plNum').style.color=plAfter>=0?'var(--green)':'var(--red)';
+    document.getElementById('wrNum').innerText=(p.win_rate_after||0).toFixed(0)+'%';
+    document.getElementById('dailyNum').innerText=(p.daily_pnl||0).toFixed(0)+' / -'+(s.max_daily_loss||500)+'kr';
+    // Prestanda idag - Olja Guld Bull Bear - DYNAMISK NU
+    const daily=p.daily_pnl||0;
+    const winsToday=p.wins_after||0;
+    const lossesToday=(p.total||0)-(p.wins_after||0);
+    const totalToday=p.total||0;
+    const hitToday=totalToday>0?Math.round((winsToday/totalToday)*100):0;
+    document.getElementById('perfPL').innerText=(daily>=0?'+':'')+daily.toFixed(0)+' SEK';
+    document.getElementById('perfPL').style.background=daily>=0?'var(--green)':'var(--red)';
+    document.getElementById('perfWins').innerText=winsToday;
+    document.getElementById('perfLosses').innerText=lossesToday;
+    document.getElementById('perfHit').innerText=hitToday+'%';
+    document.getElementById('perfHit').style.color=hitToday>=60?'var(--green)':hitToday>=50?'var(--yellow)':'var(--red)';
+    // Vald Bull/Bear
+    if(s.raketer && s.raketer.length>0){
+      const best=s.raketer[0];
+      document.getElementById('chosenRocket').innerText=best.name;
+      document.getElementById('nextEntryText').innerHTML=`Nästa möjliga entry: <b>imorgon 09:15</b> om volym kvarstår. Storlek: <b>${(s.budget*0.2).toFixed(0)} kr (20%)</b> - Score ${best.score}/100 @ ${best.price.toFixed(1)}kr`;
+      document.getElementById('entrySize').innerText=(s.budget*0.2).toFixed(0)+' kr (20%)';
+    } else {
+      document.getElementById('chosenRocket').innerText='-';
+      document.getElementById('nextEntryText').innerHTML=`Ingen raket vald just nu - inväntar nästa scan 09:15 om volym kvarstår. Storlek: <b>${(s.budget*0.2).toFixed(0)} kr (20%)</b>`;
+    }
+    // Raketer
+    document.getElementById('raketer').innerHTML=s.raketer && s.raketer.length ? s.raketer.map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><b>${r.name}</b> ${r.score}/100 @ ${r.price.toFixed(1)} SEK<br><span class="muted" style="font-size:11px">${r.reasons.join(', ')}</span>${r.news?`<br><span style="font-size:11px;background:var(--yellow);color:#000;padding:2px 6px;border-radius:4px">📰 ${r.news}</span>`:''}</div>`).join('') : '<span class="muted">Inga raketer >65 just nu (helg eller ingen som klarar filter efter courtage)</span>';
+    // Trades
+    document.getElementById('trades').innerHTML=p.trades && p.trades.length ? p.trades.slice(-6).reverse().map(t=>`<div style="padding:4px 0;border-bottom:1px solid var(--border)">${t.name} ${t.buy_price.toFixed(1)}→${t.sell_price?t.sell_price.toFixed(1):'?'} ${(t.pnl_after||0).toFixed(1)}kr ${t.sell_price?((t.pnl_after>0)?'✅':'❌'):''}</div>`).join('') : 'Inga trades än - väntar till måndag 09:15';
+    // News
+    if(s.news && s.news.length){
+      document.getElementById('news').innerHTML=s.news.map(n=>`<div class="news-item"><b>${n.ticker}</b>: ${n.title}<br><span class="muted">${n.publisher} - ${n.time}</span> <span style="background:${n.sentiment==='pos'?'var(--green)':n.sentiment==='neg'?'var(--red)':'var(--muted)'};color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px">${n.sentiment}</span> ${n.trump_related?'<span style="background:var(--yellow);color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:4px">Trump</span>':''}</div>`).join('');
+    } else {
+      document.getElementById('news').innerHTML='<span class="muted">Inga nya nyheter senaste 24h - yfinance news tomt (helg)</span>';
+    }
+    // Courtage
+    fetch('/api/courtage').then(r=>r.json()).then(c=>{
+      document.getElementById('courtage').innerHTML=`Typ: ${c.type||'mini'} - Exempel 2000kr trade: courtage ${c.examples?c.examples.find(e=>e.amount==2000)?.one_way?.toFixed(1)+'kr':'-'} + spread 0.2% = kostnad ${(c.examples?c.examples.find(e=>e.amount==2000)?.pct?.toFixed(1):'?')}%`;
+    });
+  }catch(e){
+    document.getElementById('statusText').innerText='Fel: '+e;
+  }
+}
+load(); setInterval(load, 15000);
+</script>
+</body>
+</html>
