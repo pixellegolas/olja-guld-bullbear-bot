@@ -1,1 +1,1 @@
-services:\n  - type: web\n    name: olja-guld-bull-bear-bot\n    env: python\n    buildCommand: pip install -r requirements.txt\n    startCommand: gunicorn app:app\n
+services:\n  - type: web\n    name: bot2_olja_guld_v4\n    env: python\n    buildCommand: pip install -r requirements.txt\n    startCommand: gunicorn app:app\n
