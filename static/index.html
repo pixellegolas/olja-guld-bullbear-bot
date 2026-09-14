@@ -54,7 +54,7 @@ body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-ser
 
 <div class="perf" id="perfSection">
 <div class="perf-head">
-<div class="perf-title">📈 Prestanda idag - Olja Guld Bull Bear</div>
+<div class="perf-title">📈 Prestanda idag</div>
 <div class="perf-pl" id="perfPL">+0 SEK</div>
 </div>
 <div class="perf-grid">
@@ -63,12 +63,12 @@ body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-ser
 <div class="perf-box"><div class="perf-box-num" id="perfHit" style="color:var(--green)">0%</div><div class="perf-box-label">Träff</div></div>
 </div>
 <div class="next-entry" id="nextEntry">
-<div class="next-entry-title">🚀 Vald Bull/Bear: <span id="chosenRocket">-</span></div>
+<div class="next-entry-title">🚀 Vald raket: <span id="chosenRocket">-</span></div>
 <div class="muted" style="margin-top:6px;font-size:12px" id="nextEntryText">Ingen raket vald just nu - inväntar nästa scan 09:15 om volym kvarstår. Storlek: <span id="entrySize">2000 kr (20%)</span></div>
 </div>
 </div>
 
-<div class="card"><div style="font-weight:800;margin-bottom:8px">🚀 Bull/Bear signaler (Olja, Guld, OMX, Nasdaq, Tesla, Nvidia)</div><div id="raketer" style="font-size:13px">Laddar...</div></div>
+<div class="card"><div style="font-weight:800;margin-bottom:8px">🚀 Raketer just nu</div><div id="raketer" style="font-size:13px">Laddar...</div></div>
 <div class="card"><div style="font-weight:800;margin-bottom:8px">📰 Riktiga nyheter (Yahoo Finance + Trump/olje-filter)</div><div id="news">Hämtar riktiga nyheter...</div></div>
 <div class="card"><div style="font-weight:800;margin-bottom:8px">📊 Trades (senaste)</div><div id="trades" style="font-size:12px;font-family:monospace">Laddar...</div></div>
 <div class="card"><div style="font-weight:800;margin-bottom:8px">💸 Courtage info</div><div id="courtage" style="font-size:11px" class="muted">Laddar...</div></div>
@@ -107,7 +107,7 @@ async function load(){
     document.getElementById('plNum').style.color=plAfter>=0?'var(--green)':'var(--red)';
     document.getElementById('wrNum').innerText=(p.win_rate_after||0).toFixed(0)+'%';
     document.getElementById('dailyNum').innerText=(p.daily_pnl||0).toFixed(0)+' / -'+(s.max_daily_loss||500)+'kr';
-    // Prestanda idag - Olja Guld Bull Bear - DYNAMISK NU
+    // Prestanda idag - DYNAMISK NU
     const daily=p.daily_pnl||0;
     const winsToday=p.wins_after||0;
     const lossesToday=(p.total||0)-(p.wins_after||0);
@@ -119,7 +119,7 @@ async function load(){
     document.getElementById('perfLosses').innerText=lossesToday;
     document.getElementById('perfHit').innerText=hitToday+'%';
     document.getElementById('perfHit').style.color=hitToday>=60?'var(--green)':hitToday>=50?'var(--yellow)':'var(--red)';
-    // Vald Bull/Bear
+    // Vald raket
     if(s.raketer && s.raketer.length>0){
       const best=s.raketer[0];
       document.getElementById('chosenRocket').innerText=best.name;
@@ -135,7 +135,13 @@ async function load(){
     document.getElementById('trades').innerHTML=p.trades && p.trades.length ? p.trades.slice(-6).reverse().map(t=>`<div style="padding:4px 0;border-bottom:1px solid var(--border)">${t.name} ${t.buy_price.toFixed(1)}→${t.sell_price?t.sell_price.toFixed(1):'?'} ${(t.pnl_after||0).toFixed(1)}kr ${t.sell_price?((t.pnl_after>0)?'✅':'❌'):''}</div>`).join('') : 'Inga trades än - väntar till måndag 09:15';
     // News
     if(s.news && s.news.length){
-      document.getElementById('news').innerHTML=s.news.map(n=>`<div class="news-item"><b>${n.ticker}</b>: ${n.title}<br><span class="muted">${n.publisher} - ${n.time}</span> <span style="background:${n.sentiment==='pos'?'var(--green)':n.sentiment==='neg'?'var(--red)':'var(--muted)'};color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px">${n.sentiment}</span> ${n.trump_related?'<span style="background:var(--yellow);color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:4px">Trump</span>':''}</div>`).join('');
+      
+    // FIXAD NEWS RENDERING - filtrera bort tomma
+    const filteredNews = (s.news||[]).filter(n=>n.title && n.title.length>10);
+    if(filteredNews.length===0){
+        document.getElementById('news').innerHTML='<span class="muted">Inga relevanta nyheter senaste 7 dagarna - Yahoo har dålig täckning för svenska aktier på helg. Försöker hämta olja/guld-nyheter istället...</span>';
+    } else {
+        document.getElementById('news').innerHTML=filteredNews.map(n=>`<div class="news-item"><b>${n.ticker}</b>: ${n.title}<br><span class="muted">${n.publisher} - ${n.time}</span> <span style="background:${n.sentiment==='pos'?'var(--green)':n.sentiment==='neg'?'var(--red)':'var(--muted)'};color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px">${n.sentiment}</span> ${n.trump_related?'<span style="background:var(--yellow);color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:4px">Trump</span>':''}</div>`).join('');
     } else {
       document.getElementById('news').innerHTML='<span class="muted">Inga nya nyheter senaste 24h - yfinance news tomt (helg)</span>';
     }

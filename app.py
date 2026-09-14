@@ -11,7 +11,7 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8752642455:AAEpGTSis6YVij46PrePRZnLqWbQ
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "1033208239")
 BUDGET = int(os.getenv("DAILY_BUDGET_SEK", "10000"))
 COURTAGE_TYPE = os.getenv("COURTAGE_TYPE", "mini")
-MAX_DAILY_LOSS = int(os.getenv("MAX_DAILY_LOSS_SEK", "500"))
+MAX_DAILY_LOSS = int(os.getenv("MAX_DAILY_LOSS_SEK", "300"))
 DATA_FILE = "/tmp/portfolio.json"
 
 def calc_courtage(a, t="mini"):
@@ -39,36 +39,177 @@ if portfolio.get("last_reset") != today:
 last_scan = {"time": None, "raketer": [], "status": "Startar...", "portfolio": portfolio, "budget": BUDGET, "max_daily_loss": MAX_DAILY_LOSS, "news": []}
 
 WATCHLIST = [
-    {"ticker": "USO", "name": "Sinch"},
-    {"ticker": "GLD", "name": "Embracer B"},
-    {"ticker": "QQQ", "name": "Boliden"},
-    {"ticker": "TSLA", "name": "Saab B"},
-    {"ticker": "NVDA", "name": "Volvo B"},
-    {"ticker": "BTC-USD", "name": "Investor B"},
-    {"ticker": "UCO", "name": "Nibe"},
+    {"ticker": "USO", "name": "Olja USO"},
+    {"ticker": "GLD", "name": "Guld GLD"},
+    {"ticker": "QQQ", "name": "Nasdaq QQQ"},
+    {"ticker": "TSLA", "name": "Tesla"},
+    {"ticker": "NVDA", "name": "Nvidia"},
+    {"ticker": "BTC-USD", "name": "Bitcoin"},
 ]
 
 def send_tg(m):
     try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": m, "parse_mode": "Markdown"}, timeout=10)
     except: pass
 
+
 def get_real_news(ticker):
+    """Fixad - hanterar svenska aktier som har dålig Yahoo coverage"""
     try:
-        t=yf.Ticker(ticker)
-        news=t.news
-        res=[]
-        if not news: return res
-        for n in news[:3]:
-            title=n.get('title','')
-            tl=title.lower()
-            sent='neutral'
-            if any(w in tl for w in ['avtal','forvarv','vinst','okar','hojer','uppgradering','kop']): sent='pos'
-            if any(w in tl for w in ['forlust','sanker','nedgradering','boter','stamning','saljer']): sent='neg'
-            ts=n.get('providerPublishTime')
-            time_str=datetime.fromtimestamp(ts).strftime('%H:%M') if ts else ''
-            res.append({"ticker": ticker, "title": title[:100], "publisher": n.get('publisher',''), "sentiment": sent, "time": time_str, "trump_related": 'trump' in tl})
+        t = yf.Ticker(ticker)
+        raw_news = t.news
+        if not raw_news:
+            return []  # Svenska aktier ger ofta tom lista på helg
+        seen_titles = set()
+        res = []
+        for n in raw_news:
+            title = n.get('title','').strip()
+            # Skippa om titel saknas eller är tom (det var ditt fel - visade bara "-")
+            if not title or len(title) < 10:
+                continue
+            # Deduplicera
+            if title in seen_titles:
+                continue
+            seen_titles.add(title)
+            tl = title.lower()
+            # Sentiment - mer träffsäkert
+            pos_words = ['avtal','forvarv','order','rapport battre','hojer','okar','vinst','samarbete','uppkop','uppgradering','rekord','tillvaxt']
+            neg_words = ['forlust','sanker','nedgradering','boter','stamming','varsel','konkurs','saljer av','nedskrivning','varning']
+            sent = 'neutral'
+            if any(w in tl for w in pos_words): sent = 'pos'
+            if any(w in tl for w in neg_words): sent = 'neg'
+            # Trump / olja specifikt
+            trump_related = any(k in tl for k in ['trump','biden','fed','opec','iran','russia','tariff','inflation','powell'])
+            ts = n.get('providerPublishTime')
+            time_str = ''
+            try:
+                time_str = datetime.fromtimestamp(ts).strftime('%H:%M') if ts else ''
+            except: pass
+            # Skippa gamla nyheter >7 dagar
+            if ts and (datetime.now().timestamp() - ts) > 7*24*3600:
+                continue
+            res.append({
+                "ticker": ticker,
+                "title": title[:120],
+                "publisher": n.get('publisher',''),
+                "sentiment": sent,
+                "time": time_str,
+                "trump_related": trump_related
+            })
+            if len(res) >= 2:  # Max 2 per ticker
+                break
         return res
+    except Exception as e:
+        print(f"News error {ticker}: {e}")
+        return []
+
+def get_trump_oil_news():
+    """Hämtar bredare olja/guld nyheter för att få riktiga headlines även för svenska boten"""
+    try:
+        # Försök hämta från USO och GLD som har mycket nyheter
+        all_news = []
+        for t in ["USO", "GLD", "OIL"]:
+            try:
+                tn = yf.Ticker(t)
+                raw = tn.news
+                if raw:
+                    for n in raw[:2]:
+                        title = n.get('title','').strip()
+                        if len(title) < 15: continue
+                        tl = title.lower()
+                        if any(k in tl for k in ['oil','gold','opec','fed','trump','iran','russia','dollar']):
+                            all_news.append({
+                                "ticker": t,
+                                "title": title[:120],
+                                "publisher": n.get('publisher',''),
+                                "sentiment": 'pos' if any(w in tl for w in ['rise','up','gain','surge','rally']) else 'neg' if any(w in tl for w in ['fall','drop','down','crash']) else 'neutral',
+                                "time": datetime.fromtimestamp(n.get('providerPublishTime',0)).strftime('%H:%M') if n.get('providerPublishTime') else '',
+                                "trump_related": 'trump' in tl
+                            })
+            except: continue
+        return all_news[:5]
     except: return []
+
+
+def get_trump_oil_news(ticker):
+    """Fixad - hanterar svenska aktier som har dålig Yahoo coverage"""
+    try:
+        t = yf.Ticker(ticker)
+        raw_news = t.news
+        if not raw_news:
+            return []  # Svenska aktier ger ofta tom lista på helg
+        seen_titles = set()
+        res = []
+        for n in raw_news:
+            title = n.get('title','').strip()
+            # Skippa om titel saknas eller är tom (det var ditt fel - visade bara "-")
+            if not title or len(title) < 10:
+                continue
+            # Deduplicera
+            if title in seen_titles:
+                continue
+            seen_titles.add(title)
+            tl = title.lower()
+            # Sentiment - mer träffsäkert
+            pos_words = ['avtal','forvarv','order','rapport battre','hojer','okar','vinst','samarbete','uppkop','uppgradering','rekord','tillvaxt']
+            neg_words = ['forlust','sanker','nedgradering','boter','stamming','varsel','konkurs','saljer av','nedskrivning','varning']
+            sent = 'neutral'
+            if any(w in tl for w in pos_words): sent = 'pos'
+            if any(w in tl for w in neg_words): sent = 'neg'
+            # Trump / olja specifikt
+            trump_related = any(k in tl for k in ['trump','biden','fed','opec','iran','russia','tariff','inflation','powell'])
+            ts = n.get('providerPublishTime')
+            time_str = ''
+            try:
+                time_str = datetime.fromtimestamp(ts).strftime('%H:%M') if ts else ''
+            except: pass
+            # Skippa gamla nyheter >7 dagar
+            if ts and (datetime.now().timestamp() - ts) > 7*24*3600:
+                continue
+            res.append({
+                "ticker": ticker,
+                "title": title[:120],
+                "publisher": n.get('publisher',''),
+                "sentiment": sent,
+                "time": time_str,
+                "trump_related": trump_related
+            })
+            if len(res) >= 2:  # Max 2 per ticker
+                break
+        return res
+    except Exception as e:
+        print(f"News error {ticker}: {e}")
+        return []
+
+def get_trump_oil_news():
+    return []
+
+def get_real_news_old(ticker):
+    """Hämtar bredare olja/guld nyheter för att få riktiga headlines även för svenska boten"""
+    try:
+        # Försök hämta från USO och GLD som har mycket nyheter
+        all_news = []
+        for t in ["USO", "GLD", "OIL"]:
+            try:
+                tn = yf.Ticker(t)
+                raw = tn.news
+                if raw:
+                    for n in raw[:2]:
+                        title = n.get('title','').strip()
+                        if len(title) < 15: continue
+                        tl = title.lower()
+                        if any(k in tl for k in ['oil','gold','opec','fed','trump','iran','russia','dollar']):
+                            all_news.append({
+                                "ticker": t,
+                                "title": title[:120],
+                                "publisher": n.get('publisher',''),
+                                "sentiment": 'pos' if any(w in tl for w in ['rise','up','gain','surge','rally']) else 'neg' if any(w in tl for w in ['fall','drop','down','crash']) else 'neutral',
+                                "time": datetime.fromtimestamp(n.get('providerPublishTime',0)).strftime('%H:%M') if n.get('providerPublishTime') else '',
+                                "trump_related": 'trump' in tl
+                            })
+            except: continue
+        return all_news[:5]
+    except: return []
+
 
 def score_v3(df, news_items):
     try:
