@@ -1,218 +1,206 @@
 
-import os, json, requests, threading, time
+import os, json, time, threading
+from datetime import datetime, timedelta
 from flask import Flask, jsonify, send_from_directory
-from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime
 import yfinance as yf
-import pandas as pd
+import requests
 
 app = Flask(__name__, static_folder='static')
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8752642455:AAEpGTSis6YVij46PrePRZnLqWbQ7OBCZvM")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "1033208239")
-BUDGET = int(os.getenv("DAILY_BUDGET_SEK", "10000"))
-COURTAGE_TYPE = os.getenv("COURTAGE_TYPE", "mini")
-MAX_DAILY_LOSS = int(os.getenv("MAX_DAILY_LOSS_SEK", "300"))
-DATA_FILE = "/tmp/portfolio_BOT2_OLJA_GULD_V4.json"
-NEWS_CACHE_FILE = "/tmp/news_cache_BOT2_OLJA_GULD_V4.json"
 
-def calc_courtage(a, t="mini"):
-    if t=="mini": return max(1, a*0.0025)
-    if t=="small": return max(9, a*0.00055)
-    return max(1, a*0.0025)
-
-def load_portfolio():
-    try:
-        if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "r") as f: return json.load(f)
-    except: pass
-    return {"start": BUDGET, "current": BUDGET, "trades": [], "total_pnl": 0.0, "total_pnl_after": 0.0, "total_courtage": 0.0, "win_rate": 0, "win_rate_after": 0, "total": 0, "wins": 0, "wins_after": 0, "daily_pnl": 0.0, "last_reset": datetime.now().date().isoformat()}
-
-def save_portfolio(p):
-    try:
-        with open(DATA_FILE, "w") as f: json.dump(p, f)
-    except: pass
-
-def load_news_cache():
-    try:
-        if os.path.exists(NEWS_CACHE_FILE):
-            with open(NEWS_CACHE_FILE, "r") as f: return json.load(f)
-    except: pass
-    return []
-
-def save_news_cache(news):
-    try:
-        with open(NEWS_CACHE_FILE, "w") as f: json.dump(news, f)
-    except: pass
-
-portfolio = load_portfolio()
-news_cache = load_news_cache()
-today = datetime.now().date().isoformat()
-if portfolio.get("last_reset") != today:
-    portfolio["daily_pnl"]=0.0; portfolio["last_reset"]=today; save_portfolio(portfolio)
-
-last_scan = {"time": None, "raketer": [], "signaler": [], "status": "Startar...", "portfolio": portfolio, "budget": BUDGET, "max_daily_loss": MAX_DAILY_LOSS, "news": news_cache}
+DATA_FILE = "/tmp/portfolio_v3.json"
+BUDGET = float(os.getenv("DAILY_BUDGET_SEK", "10000"))
+POSITION_SIZE = 500
+MAX_DAILY_LOSS = 250
+MAX_POSITIONS = 3
+SPREAD_PCT = 0.007
+COURTAGE_PCT = 0.0025
+COURTAGE_MIN = 1.0
+LEVERAGE = 5
 
 WATCHLIST = [
-    {"ticker": "USO", "name": "Olja USO"},
-    {"ticker": "GLD", "name": "Guld GLD"},
-    {"ticker": "QQQ", "name": "Nasdaq QQQ"},
-    {"ticker": "TSLA", "name": "Tesla"},
-    {"ticker": "NVDA", "name": "Nvidia"},
-    {"ticker": "BTC-USD", "name": "Bitcoin"},
+    {"ticker": "USO", "name": "OLJA", "cert_bull": "BULL OLJA X5 AVA", "cert_bear": "BEAR OLJA X5 AVA"},
+    {"ticker": "GLD", "name": "GULD", "cert_bull": "BULL GULD X5 AVA", "cert_bear": "BEAR GULD X5 AVA"},
+    {"ticker": "QQQ", "name": "NASDAQ", "cert_bull": "BULL NASDAQ X5", "cert_bear": "BEAR NASDAQ X5"},
+    {"ticker": "^OMX", "name": "OMX", "cert_bull": "BULL OMX X5", "cert_bear": "BEAR OMX X5"},
+    {"ticker": "BTC-USD", "name": "BITCOIN", "cert_bull": "BULL BITCOIN X5", "cert_bear": "BEAR BITCOIN X5"},
 ]
 
-def send_tg(m):
-    try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": m, "parse_mode": "Markdown"}, timeout=10)
+TRAILING_MODES = {
+    "low": {"activate_pct": 0.04, "trail_pct": 0.02, "label": "Låg (saker) +4% -> -2.0%"},
+    "medium": {"activate_pct": 0.03, "trail_pct": 0.012, "label": "Mellan +3% -> -1.2%"},
+    "aggressive": {"activate_pct": 0.02, "trail_pct": 0.008, "label": "Aggressiv +2% -> -0.8%"},
+}
+
+portfolio = {"cash": BUDGET, "positions": [], "history": [], "daily_pnl": 0, "last_reset": datetime.now().isoformat()}
+last_scan = {"time": None, "signals": [], "news": [], "status": "init", "market_open": False}
+
+def courtage(a): return max(a*COURTAGE_PCT, COURTAGE_MIN)
+def load_portfolio():
+    global portfolio
+    try:
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE) as f: portfolio=json.load(f)
     except: pass
-
-def fetch_news_fast():
-    """Hämtar nyheter snabbt i bakgrundstråd - blockerar inte /api/status"""
-    global news_cache
+def save_portfolio():
     try:
-        all_news = []
-        for item in WATCHLIST[:4]:  # Bara 4 första för snabbhet
-            try:
-                t = yf.Ticker(item['ticker'])
-                raw = t.news
-                if not raw: continue
-                for n in raw[:2]:
-                    title = n.get('title','').strip()
-                    if not title or len(title) < 15: continue
-                    if any(title == x.get('title') for x in all_news): continue
-                    tl = title.lower()
-                    sent = 'neutral'
-                    if any(w in tl for w in ['avtal','order','vinst','okar','hojer','forvarv']): sent='pos'
-                    if any(w in tl for w in ['forlust','sanker','nedgradering','varsel']): sent='neg'
-                    ts = n.get('providerPublishTime')
-                    if ts and (datetime.now().timestamp() - ts) > 7*24*3600: continue
-                    all_news.append({"ticker": item['ticker'], "title": title[:100], "publisher": n.get('publisher',''), "sentiment": sent, "time": datetime.fromtimestamp(ts).strftime('%H:%M') if ts else '', "trump_related": 'trump' in tl})
-                    if len(all_news) >= 8: break
-            except: continue
-        # Fallback olja/guld om svenska tomma
-        if len(all_news) < 2:
-            for t in ["USO", "GLD"]:
+        with open(DATA_FILE,'w') as f: json.dump(portfolio,f)
+    except: pass
+def is_market_open():
+    now_utc=datetime.utcnow()
+    cet=now_utc+timedelta(hours=2)
+    if cet.weekday()>=5: return False,cet
+    open_t=cet.replace(hour=8,minute=55,second=0); close_t=cet.replace(hour=17,minute=30,second=0)
+    return open_t<=cet<=close_t, cet
+def get_news(ticker):
+    try:
+        t=yf.Ticker(ticker); news=t.news[:4]; out=[]
+        for n in news:
+            title=n.get('title',''); low=title.lower(); sentiment='neutral'; boost=0
+            if ticker=='USO':
+                if any(k in low for k in ['opec cut','iran','sanction','war','attack','tension']): sentiment='pos'; boost=15
+                if any(k in low for k in ['drill','production up','demand weak','inventory up']): sentiment='neg'; boost=-15
+            if ticker=='GLD':
+                if any(k in low for k in ['fed dovish','rate cut','vix','fear','war','safe haven']): sentiment='pos'; boost=15
+                if any(k in low for k in ['dollar strong','hawkish','rate hike']): sentiment='neg'; boost=-15
+            if ticker=='BTC-USD':
+                if any(k in low for k in ['etf inflow','trump crypto','adoption']): sentiment='pos'; boost=12
+                if any(k in low for k in ['sec','crackdown']): sentiment='neg'; boost=-12
+            out.append({"ticker":ticker,"title":title[:120],"publisher":n.get('publisher',''),"sentiment":sentiment,"boost":boost,"time":''})
+        return out
+    except: return []
+def score_ticker(df,news_list):
+    if df.empty or len(df)<50: return 50,{}
+    close=df['Close']; sma20=close.rolling(20).mean().iloc[-1]; sma50=close.rolling(50).mean().iloc[-1]
+    diff=close.diff(); gain=diff.where(diff>0,0).rolling(14).mean().iloc[-1]; loss=-diff.where(diff<0,0).rolling(14).mean().iloc[-1]
+    rsi=100-(100/(1+gain/max(0.001,loss))); atr=(df['High']-df['Low']).rolling(14).mean().iloc[-1]/close.iloc[-1]; price=close.iloc[-1]
+    score=50; det={}
+    if price>sma20 and sma20>sma50: score+=20; det['trend']='BULL trend'
+    elif price<sma20 and sma20<sma50: score-=20; det['trend']='BEAR trend'
+    if rsi<35: score+=15; det['rsi']=f'Oversald {rsi:.0f}'
+    elif rsi>65: score-=15; det['rsi']=f'Overkopt {rsi:.0f}'
+    if atr>0.025: det['atr']=f'Hog vola {atr*100:.2f}% skip'; return None,det
+    score+=sum(n['boost'] for n in news_list); det['news_boost']=sum(n['boost'] for n in news_list)
+    return max(0,min(100,score)),det
+def send_telegram(msg):
+    tok=os.getenv("TELEGRAM_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
+    if not tok or not chat: return
+    try: requests.post(f"https://api.telegram.org/bot{tok}/sendMessage", json={"chat_id":chat,"text":msg}, timeout=10)
+    except: pass
+def trading_job():
+    global last_scan
+    load_portfolio(); premarket=False
+    while True:
+        try:
+            last_reset=datetime.fromisoformat(portfolio.get('last_reset',datetime.now().isoformat()))
+            if datetime.now().date()>last_reset.date():
+                portfolio['daily_pnl']=0; portfolio['last_reset']=datetime.now().isoformat(); save_portfolio(); premarket=False
+            is_open,cet=is_market_open(); last_scan['market_open']=is_open; last_scan['cet_time']=cet.isoformat()
+            if not is_open:
+                last_scan['status']=f"MARKET CLOSED {cet.strftime('%H:%M CET')} - oppnar 08:55"
+                for p in portfolio['positions']:
+                    try:
+                        df=yf.download(p['underlying'],period='5d',interval='1d',progress=False)
+                        if df.empty: continue
+                        cur=float(df['Close'].iloc[-1]); ch=(cur-p['entry_price'])/p['entry_price']
+                        if p['direction']=='BEAR': ch=-ch
+                        cert=100*(1+ch*LEVERAGE); p['current_cert_value']=cert
+                        if cert>p['highest_cert']: p['highest_cert']=cert
+                    except: pass
+                save_portfolio(); time.sleep(300); continue
+            if portfolio['daily_pnl'] <= -MAX_DAILY_LOSS:
+                last_scan['status']=f"STOPPAD -{MAX_DAILY_LOSS}kr nadd"; time.sleep(60); continue
+            signals=[]; all_news=[]
+            for item in WATCHLIST:
                 try:
-                    tn = yf.Ticker(t)
-                    raw = tn.news
-                    if raw:
-                        for n in raw[:2]:
-                            title = n.get('title','').strip()
-                            if len(title) < 15: continue
-                            all_news.append({"ticker": t, "title": title[:100], "publisher": n.get('publisher',''), "sentiment": 'neutral', "time": '', "trump_related": 'trump' in title.lower()})
+                    df=yf.download(item['ticker'],period='3mo',interval='1d',progress=False)
+                    news=get_news(item['ticker']); all_news.extend(news)
+                    sc,det=score_ticker(df,news)
+                    if sc is None: continue
+                    has=any(p['underlying']==item['ticker'] for p in portfolio['positions'])
+                    signals.append({"ticker":item['ticker'],"name":item['name'],"price":float(df['Close'].iloc[-1]),"score":sc,"details":det,"news":news,"has_pos":has})
                 except: continue
-        news_cache = all_news[:10]
-        save_news_cache(news_cache)
-        last_scan["news"] = news_cache
-        print(f"News cached {len(news_cache)}")
-    except Exception as e:
-        print(f"News fetch error {e}")
-
-def score_fast(df):
-    try:
-        if len(df)<50: return 0,[],{}
-        close=df['Close']; price=float(close.iloc[-1])
-        sma20=close.rolling(20).mean().iloc[-1]; sma50=close.rolling(50).mean().iloc[-1]
-        delta=close.diff(); gain=delta.where(delta>0,0).rolling(14).mean(); loss=-delta.where(delta<0,0).rolling(14).mean()
-        rs=gain/loss; rsi=100-(100/(1+rs)); rsi_val=float(rsi.iloc[-1])
-        vol=df['Volume'].iloc[-1]; vol_avg=df['Volume'].rolling(20).mean().iloc[-1]; vol_ratio=vol/vol_avg if vol_avg>0 else 1
-        s=0; rsns=[]
-        if price>sma20: s+=20; rsns.append("Over SMA20")
-        if sma20>sma50: s+=20; rsns.append("SMA20>SMA50")
-        if 50<rsi_val<70: s+=20; rsns.append(f"RSI {rsi_val:.0f}")
-        if vol_ratio>1.2: s+=20; rsns.append(f"Vol {vol_ratio:.1f}x")
-        if close.iloc[-1]>close.iloc[-5]: s+=20; rsns.append("Mom+")
-        pos=BUDGET*0.2; cost=calc_courtage(pos, COURTAGE_TYPE)*2 + pos*0.002
-        details={"price": price, "cost_pct": cost/pos*100}
-        return max(0,min(100,s)), rsns, details
-    except: return 0,[],{}
-
-def get_data(t):
-    try:
-        df=yf.Ticker(t).history(period="6mo", auto_adjust=True)
-        return None if df.empty else df
-    except: return None
-
-def job(force=False):
-    now=datetime.now()
-    today=now.date().isoformat()
-    if portfolio.get("last_reset")!=today:
-        portfolio["daily_pnl"]=0.0; portfolio["last_reset"]=today; save_portfolio(portfolio)
-    if portfolio.get("daily_pnl",0) <= -MAX_DAILY_LOSS:
-        last_scan["status"]=f"STOPPAD Max forlust {portfolio['daily_pnl']:.0f}kr"
-        last_scan["portfolio"]=portfolio; return
-    if not force and "BOT2_OLJA_GULD_V4"=="BOT1 AKTIER V3":
-        if not (7 <= now.hour < 11):
-            last_scan["status"]=f"Vilar {now.strftime('%H:%M')} UTC - Daily {portfolio.get('daily_pnl',0):.0f}kr - Helg normalt"
-            last_scan["portfolio"]=portfolio; return
-    if not force and "BOT2_OLJA_GULD_V4"=="BOT2 OLJA GULD V3":
-        if not (12 <= now.hour < 21):
-            last_scan["status"]=f"Vilar {now.strftime('%H:%M')} UTC - aktiv 14-23 svensk - Daily {portfolio.get('daily_pnl',0):.0f}kr"
-            last_scan["portfolio"]=portfolio; return
-    rak=[]
-    for item in WATCHLIST:
-        df=get_data(item['ticker'])
-        if df is None: continue
-        sc,rs,det=score_fast(df)
-        if sc>=65:
-            rak.append({**item, "score": sc, "price": det.get("price",0), "reasons": rs, "details": det})
-            pos=BUDGET*0.2
-            if portfolio["current"]>=pos and not any(tr["ticker"]==item["ticker"] and tr.get("sell_price") is None for tr in portfolio["trades"]):
-                cb=calc_courtage(pos, COURTAGE_TYPE)
-                tr={"ticker": item["ticker"], "name": item["name"], "buy_price": det.get("price",0), "buy_time": now.isoformat(), "score": sc, "position": pos, "courtage_buy": cb, "sell_price": None}
-                portfolio["trades"].append(tr); portfolio["current"]-=(pos+cb); portfolio["total_courtage"]+=cb; save_portfolio(portfolio)
-    for tr in portfolio["trades"]:
-        if tr["sell_price"] is None:
-            df=get_data(tr["ticker"])
-            if df is None: continue
-            cp=float(df['Close'].iloc[-1]); pct=(cp-tr["buy_price"])/tr["buy_price"]; days=(now-datetime.fromisoformat(tr["buy_time"])).days
-            if pct>=0.04 or pct<=-0.025 or days>=4:
-                cs=calc_courtage(tr["position"], COURTAGE_TYPE); gross=(cp-tr["buy_price"])*(tr["position"]/tr["buy_price"]); net=gross-tr["courtage_buy"]-cs
-                tr["sell_price"]=cp; tr["courtage_sell"]=cs; tr["pnl"]=gross; tr["pnl_after"]=net
-                portfolio["total_pnl"]+=gross; portfolio["total_pnl_after"]+=net; portfolio["daily_pnl"]=portfolio.get("daily_pnl",0)+net; portfolio["total_courtage"]+=cs; portfolio["total"]+=1
-                if gross>0: portfolio["wins"]+=1
-                if net>0: portfolio["wins_after"]+=1
-                if portfolio["total"]>0:
-                    portfolio["win_rate"]=portfolio["wins"]/portfolio["total"]*100
-                    portfolio["win_rate_after"]=portfolio["wins_after"]/portfolio["total"]*100
-                portfolio["current"]+=tr["position"]+gross-cs; save_portfolio(portfolio)
-    rak.sort(key=lambda x: x["score"], reverse=True)
-    last_scan["time"]=now.isoformat(); last_scan["raketer"]=rak; last_scan["signaler"]=rak; last_scan["portfolio"]=portfolio
-    last_scan["status"]=f"V4 SNABB {len(rak)} raketer P/L efter {portfolio['total_pnl_after']:.1f}kr Daily {portfolio.get('daily_pnl',0):.0f}kr - Status snabb, news i bakgrund"
-    # Hämta news i bakgrundstråd så status inte blockerar
-    threading.Thread(target=fetch_news_fast, daemon=True).start()
-
-sched=BackgroundScheduler()
-sched.add_job(lambda: job(force=False), 'interval', minutes=5)
-sched.add_job(lambda: fetch_news_fast(), 'interval', minutes=15)
-sched.start()
-job(force=True)
-fetch_news_fast()
+            signals_sorted=sorted(signals,key=lambda x:x['score'],reverse=True)
+            last_scan['time']=datetime.now().isoformat(); last_scan['signals']=signals_sorted; last_scan['news']=all_news[:10]
+            last_scan['status']=f"MARKET OPEN {cet.strftime('%H:%M')} - aktiv"
+            if cet.hour==8 and 55<=cet.minute<=59 and not premarket and signals_sorted:
+                top=[s for s in signals_sorted if s['score']>=70 or s['score']<=30][:3]
+                if top:
+                    msg=f"Market oppnar 09:00 - {len(top)} signaler:\n"
+                    for t in top: msg+=f"{'BULL' if t['score']>=70 else 'BEAR'} {t['name']} {t['score']:.0f}\n"
+                    send_telegram(msg); premarket=True
+            mode_key=os.getenv("TRAILING_MODE","medium"); mode=TRAILING_MODES.get(mode_key,TRAILING_MODES['medium'])
+            for s in signals_sorted:
+                if len(portfolio['positions'])>=MAX_POSITIONS: break
+                if s['has_pos']: continue
+                if portfolio['cash']<POSITION_SIZE: continue
+                buy=None
+                if s['score']>=78: buy='BULL'
+                elif s['score']<=22: buy='BEAR'
+                if not buy: continue
+                spread=POSITION_SIZE*SPREAD_PCT; court=courtage(POSITION_SIZE); tot=POSITION_SIZE+spread+court
+                if portfolio['cash']<tot: continue
+                portfolio['cash']-=tot
+                pos={"id":datetime.now().isoformat(),"underlying":s['ticker'],"name":s['name'],"direction":buy,"cert":next((w[f'cert_{buy.lower()}'] for w in WATCHLIST if w['ticker']==s['ticker']),buy),"entry_price":s['price'],"entry_time":datetime.now().isoformat(),"size_sek":POSITION_SIZE,"cert_entry_value":100.0,"current_cert_value":100.0,"highest_cert":100.0,"trailing_active":False,"trailing_stop":None,"spread_paid":spread,"courtage_paid":court,"score_at_entry":s['score']}
+                portfolio['positions'].append(pos); save_portfolio()
+                send_telegram(f"{'BULL' if buy=='BULL' else 'BEAR'} KOP {buy} {s['name']} X5 Score {s['score']:.0f} Pris {s['price']:.2f}")
+            to_rem=[]
+            for p in portfolio['positions']:
+                try:
+                    df=yf.download(p['underlying'],period='5d',interval='1d',progress=False)
+                    if df.empty: continue
+                    cur=float(df['Close'].iloc[-1]); ch=(cur-p['entry_price'])/p['entry_price']
+                    if p['direction']=='BEAR': ch=-ch
+                    cert=100*(1+ch*LEVERAGE); p['current_cert_value']=cert
+                    if cert>p['highest_cert']: p['highest_cert']=cert
+                    if not p['trailing_active'] and cert>=100*(1+mode['activate_pct']):
+                        p['trailing_active']=True; p['trailing_stop']=p['highest_cert']*(1-mode['trail_pct'])
+                    if p['trailing_active']:
+                        ns=p['highest_cert']*(1-mode['trail_pct'])
+                        if ns>(p['trailing_stop'] or 0): p['trailing_stop']=ns
+                    sell=False; reason=""
+                    if cert<=97.5: sell=True; reason=f"Stop -2.5% {cert:.1f}"
+                    elif p['trailing_active'] and p['trailing_stop'] and cert<=p['trailing_stop']: sell=True; reason=f"Trailing {p['trailing_stop']:.1f} laser +{cert-100:.1f}%"
+                    elif cert>=105: sell=True; reason=f"TP +5% {cert:.1f}"
+                    elif (datetime.now()-datetime.fromisoformat(p['entry_time'])).days>=4: sell=True; reason="Tidsstop 4d"
+                    if sell:
+                        exit_v=p['size_sek']*(cert/100); spread_e=exit_v*SPREAD_PCT; court_e=courtage(exit_v); net=exit_v-spread_e-court_e
+                        pnl=net-p['size_sek']-p['spread_paid']-p['courtage_paid']
+                        portfolio['cash']+=net; portfolio['daily_pnl']+=pnl
+                        portfolio['history'].append({**p,"exit_price":cur,"exit_cert":cert,"exit_time":datetime.now().isoformat(),"pnl":pnl,"reason":reason})
+                        to_rem.append(p); save_portfolio()
+                        send_telegram(f"SALJ {p['direction']} {p['name']} | {reason} P/L {pnl:.1f}kr")
+                except: continue
+            for r in to_rem:
+                if r in portfolio['positions']: portfolio['positions'].remove(r)
+            save_portfolio()
+        except Exception as e:
+            last_scan['status']=f"Error {e}"
+        time.sleep(900)
 
 @app.route("/")
-def idx(): return send_from_directory('static','index.html')
-@app.route("/manifest.json")
-def man(): return send_from_directory('static','manifest.json')
-@app.route("/icon-192.png")
-def i192(): return send_from_directory('static','icon-192.png')
-@app.route("/icon-512.png")
-def i512(): return send_from_directory('static','icon-512.png')
+def index():
+    return send_from_directory('static','index.html')
+@app.route("/api/ping")
+def ping():
+    is_open,cet=is_market_open()
+    return jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"note":"Ping var 5e min i UptimeRobot. Trading endast 08:55-17:30 CET"})
 @app.route("/api/status")
-def st(): return jsonify(last_scan)
-@app.route("/api/portfolio")
-def pf(): return jsonify(portfolio)
-@app.route("/api/news")
-def news_api(): return jsonify({"news": last_scan.get("news", news_cache), "time": last_scan.get("time")})
-@app.route("/api/courtage")
-def ct():
-    res=[]
-    for a in [1000,2000,5000,10000]:
-        c=calc_courtage(a, COURTAGE_TYPE)
-        res.append({"amount": a, "one_way": c, "both": c*2, "pct": c*2/a*100})
-    return jsonify({"type": COURTAGE_TYPE, "examples": res})
-@app.route("/api/test-telegram")
-def tt(): send_tg(f"V4 SNABB FIX - ingen mer Laddar... - P/L efter {portfolio['total_pnl_after']:.1f}kr"); return jsonify({"ok": True})
+def status():
+    return jsonify({"portfolio":portfolio,"last_scan":last_scan,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET"}})
 @app.route("/api/scan-now")
-def sn(): job(force=True); return jsonify(last_scan)
+def scan():
+    return jsonify(last_scan)
+@app.route("/api/set-trailing/<mode>")
+def set_trail(mode):
+    if mode in TRAILING_MODES:
+        os.environ["TRAILING_MODE"]=mode
+        return jsonify({"ok":True,"mode":TRAILING_MODES[mode]})
+    return jsonify({"ok":False}),400
+@app.route("/api/reset-daily")
+def reset():
+    portfolio['daily_pnl']=0; portfolio['last_reset']=datetime.now().isoformat(); save_portfolio(); return jsonify({"ok":True})
 
+load_portfolio()
+threading.Thread(target=trading_job,daemon=True).start()
 if __name__=="__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT",10000)))
+    app.run(host="0.0.0.0",port=int(os.getenv("PORT","10000")))

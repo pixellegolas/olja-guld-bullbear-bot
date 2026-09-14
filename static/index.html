@@ -1,159 +1,69 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Avanza Bot V3</title>
+
+<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bulle Bear V3.1</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0a0a0f;--card:#15151f;--card2:#1c1c2a;--text:#f5f5f7;--muted:#8b8fa3;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--border:#222236;--banner:#f59e0b}
-[data-theme="light"]{--bg:#f1f5f9;--card:#ffffff;--card2:#f8fafc;--text:#0f172a;--muted:#64748b;--border:#e2e8f0;--banner:#f59e0b}
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;transition:all 0.3s ease;padding-bottom:100px}
-.banner{background:var(--banner);color:#000;text-align:center;padding:8px 12px;font-weight:800;font-size:12px;letter-spacing:0.3px}
-.header{padding:18px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border)}
-.logo{font-weight:900;font-size:18px;letter-spacing:-0.5px}
-.muted{color:var(--muted);font-size:11px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:14px;margin:10px 12px}
-.kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 12px}
-.kpi-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:14px;text-align:center}
-.kpi-num{font-size:26px;font-weight:900;font-family:monospace}
-.kpi-label{font-size:10px;color:var(--muted);letter-spacing:0.5px;margin-top:4px;text-transform:uppercase}
-.perf{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin:10px 12px}
-.perf-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.perf-title{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px}
-.perf-pl{background:var(--green);color:#000;padding:4px 10px;border-radius:999px;font-weight:800;font-size:12px;font-family:monospace}
-.perf-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-.perf-box{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:12px;text-align:center}
-.perf-box-num{font-size:22px;font-weight:900}
-.perf-box-label{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase}
-.next-entry{background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.3);border-radius:14px;padding:12px;margin-top:12px}
-.next-entry-title{color:var(--blue);font-weight:800;font-size:13px;display:flex;align-items:center;gap:6px}
-.btn{padding:10px 16px;border-radius:12px;border:none;font-weight:800;cursor:pointer;font-size:12px}
-.btn-green{background:var(--green);color:#000}
-.btn-yellow{background:var(--yellow);color:#000}
-.btn-blue{background:var(--blue);color:#fff}
-.btn-row{position:fixed;bottom:14px;right:14px;display:flex;flex-direction:column;gap:8px;z-index:100}
-.toggle{position:fixed;top:40px;right:14px;z-index:101;background:var(--card);border:1px solid var(--border);border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:800;font-size:12px}
-.news-item{padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
-.news-item:last-child{border:none}
-</style>
-</head>
-<body>
-<div class="banner" id="banner">🧪 DEMO V3 - Budget <span id="bannerBudget">10000</span>kr - Courtage + Max förlust + Riktiga nyheter + Tema</div>
-<button class="toggle" id="themeToggle" onclick="toggleTheme()">🌙 Mörkt</button>
-<div class="header">
-<div><div class="logo" id="logoTitle">AVANZA RAKET BOT V3</div><div class="muted" id="statusText">Laddar...</div></div>
-<div style="text-align:right"><div style="background:var(--green);color:#000;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800">DEMO LIVE</div><div class="muted" style="margin-top:4px" id="timeText">--:--</div></div>
+:root{--bg:#f2f2f3;--card:#fff;--text:#0f0f12;--muted:#8a8a93;--border:#ececef;--green:#12a150;--red:#e5484d}
+[data-theme="dark"]{--bg:#0a0a0e;--card:#15151c;--text:#f5f5f7;--muted:#9aa0a6;--border:#23232b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+h1{font-size:22px;font-weight:800;margin:0}
+.badge{font-size:11px;padding:6px 10px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--muted)}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:20px}
+.label{font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:8px}
+.big{font-size:42px;font-weight:800;letter-spacing:-0.03em;line-height:1}.big.sm{font-size:32px}.mono{font-family:JetBrains Mono,monospace}
+.green{color:var(--green)}.red{color:var(--red)}
+.row{display:grid;grid-template-columns:1.2fr 0.8fr;gap:14px}
+table{width:100%;border-collapse:collapse}th{font-size:11px;color:var(--muted);text-align:left;padding:10px 0;border-bottom:1px solid var(--border)}td{padding:12px 0;border-bottom:1px solid var(--border);font-size:13px}
+.pill{display:inline-flex;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--text);color:var(--bg)}
+.pill.bear{background:transparent;border:1px solid var(--border);color:var(--text)}
+.slider{display:flex;gap:8px;margin-top:10px} .slider button{flex:1;padding:10px;border-radius:999px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-weight:700;font-size:12px} .slider button.active{background:var(--text);color:var(--bg)}
+#themeToggle{position:fixed;top:14px;right:14px;z-index:99;border-radius:999px;padding:8px 14px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-weight:700}
+.news{font-size:12px;padding:8px 0;border-bottom:1px dashed var(--border)}
+@media(max-width:900px){.grid4{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}}
+</style></head><body>
+<button id="themeToggle">Mörkt</button>
+<div class="wrap">
+<div class="top"><h1>Bulle Bear • V3.1 Market Hours</h1><div style="display:flex;gap:8px"><span class="badge" id="statusBadge">Laddar</span><span class="badge" id="timeBadge"></span></div></div>
+<div class="grid4">
+<div class="card"><div class="label">Total P/L efter avgifter</div><div class="big mono" id="totalPnL">+0 kr</div><div class="label">Spread + courtage raknat</div></div>
+<div class="card"><div class="label">Daglig P/L / Max</div><div class="big sm mono" id="dailyPnL">0 / -250kr</div><div class="label">Stoppar vid -250kr</div></div>
+<div class="card"><div class="label">Winrate</div><div class="big sm mono" id="winrate">—</div><div class="label" id="tradeCount">0 trades</div></div>
+<div class="card"><div class="label">Cash / Budget</div><div class="big sm mono" id="cash">10000kr</div><div class="label">500kr per trade 08:55-17:30 CET</div></div>
 </div>
-
-<div class="kpi">
-<div class="kpi-card"><div class="muted">BUDGET</div><div class="kpi-num" id="budgetNum">10000kr</div></div>
-<div class="kpi-card"><div class="muted">P/L EFTER COURTAGE</div><div class="kpi-num" id="plNum">0kr</div></div>
-<div class="kpi-card"><div class="muted">WIN RATE EFTER</div><div class="kpi-num" id="wrNum">0%</div></div>
-<div class="kpi-card"><div class="muted">DAILY / MAX</div><div class="kpi-num" style="font-size:18px" id="dailyNum">0 / -500kr</div></div>
+<div class="card" style="margin-bottom:14px">
+<div class="label">Trailing-lage (klicka)</div>
+<div class="slider"><button id="btn-low" onclick="setTrail('low')">Låg<br><small>+4% → -2.0%</small></button><button id="btn-medium" class="active" onclick="setTrail('medium')">Mellan<br><small>+3% → -1.2%</small></button><button id="btn-aggressive" onclick="setTrail('aggressive')">Aggressiv<br><small>+2% → -0.8%</small></button></div>
 </div>
-
-<div class="perf" id="perfSection">
-<div class="perf-head">
-<div class="perf-title">📈 Prestanda idag</div>
-<div class="perf-pl" id="perfPL">+0 SEK</div>
+<div class="row">
+<div class="card"><div class="label">Oppna positioner (max 3)</div><table><thead><tr><th>Cert</th><th>Entry</th><th>Nu / Trail</th><th>P/L</th></tr></thead><tbody id="posBody"></tbody></table></div>
+<div><div class="card" style="margin-bottom:14px"><div class="label">Signaler</div><div id="signals"></div></div><div class="card"><div class="label">Nyheter</div><div id="news"></div></div></div>
 </div>
-<div class="perf-grid">
-<div class="perf-box"><div class="perf-box-num" id="perfWins">0</div><div class="perf-box-label">Vinster</div></div>
-<div class="perf-box"><div class="perf-box-num" id="perfLosses">0</div><div class="perf-box-label">Förluster</div></div>
-<div class="perf-box"><div class="perf-box-num" id="perfHit" style="color:var(--green)">0%</div><div class="perf-box-label">Träff</div></div>
+<div class="card" style="margin-top:14px"><div class="label">Stangda trades</div><table><thead><tr><th>Tid</th><th>Cert</th><th>P/L</th><th>Anledning</th></tr></thead><tbody id="histBody"></tbody></table></div>
+<div class="card" style="margin-top:14px"><div class="label">Render - hall vaken + Market Hours</div><div style="font-size:12px;color:var(--muted)">Trading endast 08:55-17:30 CET. Lagg i UptimeRobot: <code id="pingUrl"></code><br>Ping: <span id="pingStatus">-</span></div></div>
 </div>
-<div class="next-entry" id="nextEntry">
-<div class="next-entry-title">🚀 Vald raket: <span id="chosenRocket">-</span></div>
-<div class="muted" style="margin-top:6px;font-size:12px" id="nextEntryText">Ingen raket vald just nu - inväntar nästa scan 09:15 om volym kvarstår. Storlek: <span id="entrySize">2000 kr (20%)</span></div>
-</div>
-</div>
-
-<div class="card"><div style="font-weight:800;margin-bottom:8px">🚀 Raketer just nu</div><div id="raketer" style="font-size:13px">Laddar...</div></div>
-<div class="card"><div style="font-weight:800;margin-bottom:8px">📰 Riktiga nyheter (Yahoo Finance + Trump/olje-filter)</div><div id="news">Hämtar riktiga nyheter...</div></div>
-<div class="card"><div style="font-weight:800;margin-bottom:8px">📊 Trades (senaste)</div><div id="trades" style="font-size:12px;font-family:monospace">Laddar...</div></div>
-<div class="card"><div style="font-weight:800;margin-bottom:8px">💸 Courtage info</div><div id="courtage" style="font-size:11px" class="muted">Laddar...</div></div>
-
-<div class="btn-row">
-<button class="btn btn-green" onclick="fetch('/api/test-telegram').then(r=>r.json()).then(d=>alert('Telegram skickat!'))">📲 Test Telegram</button>
-<button class="btn btn-yellow" onclick="fetch('/api/portfolio').then(r=>r.json()).then(d=>alert('P/L efter: '+d.total_pnl_after.toFixed(1)+'kr\nWR: '+d.win_rate_after.toFixed(0)+'%\nDaily: '+d.daily_pnl.toFixed(1)+'kr'))">📊 Effektivitet</button>
-<button class="btn btn-blue" onclick="fetch('/api/scan-now').then(r=>r.json()).then(d=>{load();})">🔍 Scan nu</button>
-</div>
-
 <script>
-function toggleTheme(){
-  const cur=document.documentElement.getAttribute('data-theme');
-  const next=cur==='light'?'dark':'light';
-  document.documentElement.setAttribute('data-theme',next);
-  localStorage.setItem('theme',next);
-  document.getElementById('themeToggle').innerText=next==='light'?'☀️ Ljust':'🌙 Mörkt';
-}
-(function(){
-  const saved=localStorage.getItem('theme')||'dark';
-  document.documentElement.setAttribute('data-theme',saved);
-  document.getElementById('themeToggle').innerText=saved==='light'?'☀️ Ljust':'🌙 Mörkt';
-})();
-
+let mode=localStorage.getItem('trailMode')||'medium';
+function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme');const next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);localStorage.setItem('theme',next);document.getElementById('themeToggle').innerText=next==='dark'?'Ljust':'Mörkt';}
+document.getElementById('themeToggle').onclick=toggleTheme;const saved=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-theme',saved);document.getElementById('themeToggle').innerText=saved==='dark'?'Ljust':'Mörkt';
+function setTrail(m){mode=m;localStorage.setItem('trailMode',m);document.querySelectorAll('.slider button').forEach(b=>b.classList.remove('active'));document.getElementById('btn-'+m).classList.add('active');fetch('/api/set-trailing/'+m);}
+setTrail(mode);
 async function load(){
-  try{
-    const s=await fetch('/api/status').then(r=>r.json());
-    const p=s.portfolio;
-    document.getElementById('bannerBudget').innerText=s.budget;
-    document.getElementById('budgetNum').innerText=s.budget+'kr';
-    document.getElementById('statusText').innerText=s.status;
-    document.getElementById('timeText').innerText=new Date().toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'});
-    // P/L
-    const plAfter=p.total_pnl_after||0;
-    document.getElementById('plNum').innerText=plAfter.toFixed(0)+'kr';
-    document.getElementById('plNum').style.color=plAfter>=0?'var(--green)':'var(--red)';
-    document.getElementById('wrNum').innerText=(p.win_rate_after||0).toFixed(0)+'%';
-    document.getElementById('dailyNum').innerText=(p.daily_pnl||0).toFixed(0)+' / -'+(s.max_daily_loss||500)+'kr';
-    // Prestanda idag - DYNAMISK NU
-    const daily=p.daily_pnl||0;
-    const winsToday=p.wins_after||0;
-    const lossesToday=(p.total||0)-(p.wins_after||0);
-    const totalToday=p.total||0;
-    const hitToday=totalToday>0?Math.round((winsToday/totalToday)*100):0;
-    document.getElementById('perfPL').innerText=(daily>=0?'+':'')+daily.toFixed(0)+' SEK';
-    document.getElementById('perfPL').style.background=daily>=0?'var(--green)':'var(--red)';
-    document.getElementById('perfWins').innerText=winsToday;
-    document.getElementById('perfLosses').innerText=lossesToday;
-    document.getElementById('perfHit').innerText=hitToday+'%';
-    document.getElementById('perfHit').style.color=hitToday>=60?'var(--green)':hitToday>=50?'var(--yellow)':'var(--red)';
-    // Vald raket
-    if(s.raketer && s.raketer.length>0){
-      const best=s.raketer[0];
-      document.getElementById('chosenRocket').innerText=best.name;
-      document.getElementById('nextEntryText').innerHTML=`Nästa möjliga entry: <b>imorgon 09:15</b> om volym kvarstår. Storlek: <b>${(s.budget*0.2).toFixed(0)} kr (20%)</b> - Score ${best.score}/100 @ ${best.price.toFixed(1)}kr`;
-      document.getElementById('entrySize').innerText=(s.budget*0.2).toFixed(0)+' kr (20%)';
-    } else {
-      document.getElementById('chosenRocket').innerText='-';
-      document.getElementById('nextEntryText').innerHTML=`Ingen raket vald just nu - inväntar nästa scan 09:15 om volym kvarstår. Storlek: <b>${(s.budget*0.2).toFixed(0)} kr (20%)</b>`;
-    }
-    // Raketer
-    document.getElementById('raketer').innerHTML=s.raketer && s.raketer.length ? s.raketer.map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><b>${r.name}</b> ${r.score}/100 @ ${r.price.toFixed(1)} SEK<br><span class="muted" style="font-size:11px">${r.reasons.join(', ')}</span>${r.news?`<br><span style="font-size:11px;background:var(--yellow);color:#000;padding:2px 6px;border-radius:4px">📰 ${r.news}</span>`:''}</div>`).join('') : '<span class="muted">Inga raketer >65 just nu (helg eller ingen som klarar filter efter courtage)</span>';
-    // Trades
-    document.getElementById('trades').innerHTML=p.trades && p.trades.length ? p.trades.slice(-6).reverse().map(t=>`<div style="padding:4px 0;border-bottom:1px solid var(--border)">${t.name} ${t.buy_price.toFixed(1)}→${t.sell_price?t.sell_price.toFixed(1):'?'} ${(t.pnl_after||0).toFixed(1)}kr ${t.sell_price?((t.pnl_after>0)?'✅':'❌'):''}</div>`).join('') : 'Inga trades än - väntar till måndag 09:15';
-    // News
-    if(s.news && s.news.length){
-      
-    // FIXAD NEWS RENDERING - filtrera bort tomma
-    const filteredNews = (s.news||[]).filter(n=>n.title && n.title.length>10);
-    if(filteredNews.length===0){
-        document.getElementById('news').innerHTML='<span class="muted">Inga relevanta nyheter senaste 7 dagarna - Yahoo har dålig täckning för svenska aktier på helg. Försöker hämta olja/guld-nyheter istället...</span>';
-    } else {
-        document.getElementById('news').innerHTML=filteredNews.map(n=>`<div class="news-item"><b>${n.ticker}</b>: ${n.title}<br><span class="muted">${n.publisher} - ${n.time}</span> <span style="background:${n.sentiment==='pos'?'var(--green)':n.sentiment==='neg'?'var(--red)':'var(--muted)'};color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:6px">${n.sentiment}</span> ${n.trump_related?'<span style="background:var(--yellow);color:#000;padding:2px 6px;border-radius:4px;font-size:10px;margin-left:4px">Trump</span>':''}</div>`).join('');
-    } else {
-      document.getElementById('news').innerHTML='<span class="muted">Inga nya nyheter senaste 24h - yfinance news tomt (helg)</span>';
-    }
-    // Courtage
-    fetch('/api/courtage').then(r=>r.json()).then(c=>{
-      document.getElementById('courtage').innerHTML=`Typ: ${c.type||'mini'} - Exempel 2000kr trade: courtage ${c.examples?c.examples.find(e=>e.amount==2000)?.one_way?.toFixed(1)+'kr':'-'} + spread 0.2% = kostnad ${(c.examples?c.examples.find(e=>e.amount==2000)?.pct?.toFixed(1):'?')}%`;
-    });
-  }catch(e){
-    document.getElementById('statusText').innerText='Fel: '+e;
-  }
-}
-load(); setInterval(load, 15000);
-</script>
-</body>
-</html>
+ try{
+  const r=await fetch('/api/status');const data=await r.json();const p=data.portfolio;const scan=data.last_scan;
+  document.getElementById('statusBadge').innerText=scan.status||'OK';document.getElementById('timeBadge').innerText=scan.cet_time?new Date(scan.cet_time).toLocaleTimeString('sv-SE'):'';
+  document.getElementById('cash').innerText=Math.round(p.cash)+'kr';
+  document.getElementById('dailyPnL').innerText=(p.daily_pnl>=0?'+':'')+p.daily_pnl.toFixed(0)+' / -250kr';
+  const total=p.history.reduce((a,h)=>a+h.pnl,0);document.getElementById('totalPnL').innerText=(total>=0?'+':'')+total.toFixed(0)+'kr';
+  document.getElementById('winrate').innerText=p.history.length?Math.round(p.history.filter(h=>h.pnl>0).length/p.history.length*100)+'%':'—';
+  document.getElementById('tradeCount').innerText=p.history.length+' trades';
+  const pb=document.getElementById('posBody');pb.innerHTML='';p.positions.forEach(pos=>{const cur=pos.current_cert_value;const exitV=pos.size_sek*(cur/100);const net=exitV-exitV*0.007-Math.max(exitV*0.0025,1);const pnl=net-pos.size_sek-pos.spread_paid-pos.courtage_paid;pb.innerHTML+=`<tr><td><span class="pill ${pos.direction==='BEAR'?'bear':''}">${pos.direction}</span> ${pos.name}</td><td>${pos.entry_price.toFixed(2)} -> ${cur.toFixed(1)}</td><td>${pos.trailing_active?'Trail '+pos.trailing_stop.toFixed(1):'Vantar'}</td><td class="${pnl>=0?'green':'red'}">${pnl.toFixed(1)}kr</td></tr>`;});if(!p.positions.length)pb.innerHTML='<tr><td colspan=4>Inga oppna</td></tr>';
+  const sDiv=document.getElementById('signals');sDiv.innerHTML='';(scan.signals||[]).slice(0,6).forEach(s=>{sDiv.innerHTML+=`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><b>${s.name}</b> ${s.price.toFixed(2)}<br><small>${s.details.trend||''}</small></div><div>${s.score.toFixed(0)}</div></div>`;});
+  const nDiv=document.getElementById('news');nDiv.innerHTML='';(scan.news||[]).forEach(n=>{nDiv.innerHTML+=`<div class="news"><b>${n.ticker}</b> ${n.title}</div>`;});
+  const hb=document.getElementById('histBody');hb.innerHTML='';p.history.slice(-10).reverse().forEach(h=>{hb.innerHTML+=`<tr><td>${new Date(h.exit_time).toLocaleTimeString('sv-SE')}</td><td>${h.direction} ${h.name}</td><td class="${h.pnl>=0?'green':'red'}">${h.pnl.toFixed(1)}kr</td><td style="font-size:11px">${h.reason}</td></tr>`;});
+  document.getElementById('pingUrl').innerText=location.origin+'/api/ping';
+ }catch(e){} }
+load();setInterval(load,15000);
+</script></body></html>
