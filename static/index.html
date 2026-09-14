@@ -1,69 +1,114 @@
 
-<!doctype html><html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bulle Bear V3.1</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bulle Bear — Polara Edition</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#f2f2f3;--card:#fff;--text:#0f0f12;--muted:#8a8a93;--border:#ececef;--green:#12a150;--red:#e5484d}
-[data-theme="dark"]{--bg:#0a0a0e;--card:#15151c;--text:#f5f5f7;--muted:#9aa0a6;--border:#23232b}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:28px 20px}
-.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
-h1{font-size:22px;font-weight:800;margin:0}
-.badge{font-size:11px;padding:6px 10px;border-radius:999px;background:var(--card);border:1px solid var(--border);color:var(--muted)}
-.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:20px}
-.label{font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:8px}
-.big{font-size:42px;font-weight:800;letter-spacing:-0.03em;line-height:1}.big.sm{font-size:32px}.mono{font-family:JetBrains Mono,monospace}
-.green{color:var(--green)}.red{color:var(--red)}
-.row{display:grid;grid-template-columns:1.2fr 0.8fr;gap:14px}
-table{width:100%;border-collapse:collapse}th{font-size:11px;color:var(--muted);text-align:left;padding:10px 0;border-bottom:1px solid var(--border)}td{padding:12px 0;border-bottom:1px solid var(--border);font-size:13px}
-.pill{display:inline-flex;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--text);color:var(--bg)}
-.pill.bear{background:transparent;border:1px solid var(--border);color:var(--text)}
-.slider{display:flex;gap:8px;margin-top:10px} .slider button{flex:1;padding:10px;border-radius:999px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-weight:700;font-size:12px} .slider button.active{background:var(--text);color:var(--bg)}
-#themeToggle{position:fixed;top:14px;right:14px;z-index:99;border-radius:999px;padding:8px 14px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-weight:700}
-.news{font-size:12px;padding:8px 0;border-bottom:1px dashed var(--border)}
-@media(max-width:900px){.grid4{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}}
-</style></head><body>
-<button id="themeToggle">Mörkt</button>
+:root{--bg:#fcfcfa;--bg-card:#ffffff;--bg-soft:#f6f6f3;--text:#0a0a0a;--muted:#7a7a76;--faint:#b0b0aa;--hair:#e5e5e0;--hair-strong:#d1d1cc;--pos:#12a150;--neg:#e5484d}
+[data-theme="dark"]{--bg:#0f0f0f;--bg-card:#1a1a1a;--bg-soft:#151515;--text:#f5f5f0;--muted:#9a9a95;--faint:#5a5a56;--hair:#262624;--hair-strong:#3a3a36;--pos:#1fcf6d;--neg:#ff5a5f}
+*{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:Inter,sans-serif;transition:background .2s,color .2s}
+.serif{font-family:'Playfair Display',Georgia,serif}.mono{font-family:'JetBrains Mono',monospace}.sans{font-family:Inter,sans-serif}
+.fig{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.hair-b{border-bottom:1px solid var(--hair)}.hair-t{border-top:1px solid var(--hair)}.hair{border:1px solid var(--hair)}
+.wrap{max-width:1280px;margin:0 auto;padding:0 20px}
+@media(min-width:768px){.wrap{padding:0 40px}}
+.top{border-bottom:1px solid var(--hair);padding:14px 0;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.big{font-size:48px;font-weight:800;letter-spacing:-0.04em;line-height:.95}
+@media(min-width:768px){.big{font-size:56px}}
+.big.sm{font-size:36px}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+.label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.table{width:100%;border-collapse:collapse}th{font-size:11px;color:var(--muted);text-align:left;padding:10px 0;border-bottom:1px solid var(--hair);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+td{padding:12px 0;border-bottom:1px solid var(--hair);font-size:13px}
+.pill{display:inline-flex;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:700;background:var(--text);color:var(--bg)}
+.pill.bear{background:transparent;border:1px solid var(--hair-strong);color:var(--text)}
+button.t{border:1px solid var(--hair);background:var(--bg-card);color:var(--text);border-radius:999px;padding:10px 14px;font-weight:700;font-size:12px;cursor:pointer}
+button.t.active{background:var(--text);color:var(--bg)}
+.news{font-size:12px;padding:10px 0;border-bottom:1px dashed var(--hair)}
+#themeToggle{position:fixed;top:12px;right:12px;z-index:99;border-radius:999px;padding:8px 14px;border:1px solid var(--hair);background:var(--bg-card);cursor:pointer;font-weight:700;font-size:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media(max-width:900px){.grid4{grid-template-columns:1fr 1fr}}
+.row2{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}
+@media(max-width:900px){.row2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<button id="themeToggle">🌙 Mörkt</button>
 <div class="wrap">
-<div class="top"><h1>Bulle Bear • V3.1 Market Hours</h1><div style="display:flex;gap:8px"><span class="badge" id="statusBadge">Laddar</span><span class="badge" id="timeBadge"></span></div></div>
+<header class="top"><div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><span class="mono" style="font-size:11px;letter-spacing:.14em;text-transform:uppercase">Utgåva 01 • Bulle Bear • Olja & Guld</span><span class="mono" id="tMinus" style="font-size:10px;color:var(--muted);text-transform:uppercase"></span><span class="mono" id="cetTime" style="font-size:10px;color:var(--muted);text-transform:uppercase"></span></div><span class="fig" id="statusBadge">Laddar</span></header>
+
+<section style="padding:32px 0 18px"><div class="fig">fig. 01 — Om idag var handelsdagen.</div><h1 class="serif" style="font-size:44px;line-height:.98;letter-spacing:-0.02em;margin:12px 0 20px;max-width:16ch">Sammanvägt över signal, momentum och nyheter. Varje krona efter avgifter.</h1>
+
 <div class="grid4">
-<div class="card"><div class="label">Total P/L efter avgifter</div><div class="big mono" id="totalPnL">+0 kr</div><div class="label">Spread + courtage raknat</div></div>
-<div class="card"><div class="label">Daglig P/L / Max</div><div class="big sm mono" id="dailyPnL">0 / -250kr</div><div class="label">Stoppar vid -250kr</div></div>
-<div class="card"><div class="label">Winrate</div><div class="big sm mono" id="winrate">—</div><div class="label" id="tradeCount">0 trades</div></div>
-<div class="card"><div class="label">Cash / Budget</div><div class="big sm mono" id="cash">10000kr</div><div class="label">500kr per trade 08:55-17:30 CET</div></div>
+<div class="hair" style="background:var(--bg-card);padding:18px;border-radius:16px"><div class="label">Total P/L efter avgifter</div><div class="big serif mono" id="totalPnL">+0kr</div><div class="mono" style="font-size:10px;color:var(--faint);margin-top:6px">Spread 0.7% + courtage 0.25% min 1kr</div></div>
+<div class="hair" style="background:var(--bg-card);padding:18px;border-radius:16px"><div class="label">Daglig P/L / Max</div><div class="big sm serif mono" id="dailyPnL">0 / -250kr</div><div class="mono" style="font-size:10px;color:var(--muted)">Stoppar vid -250kr</div></div>
+<div class="hair" style="background:var(--bg-card);padding:18px;border-radius:16px"><div class="label">Winrate / Trades</div><div class="big sm serif mono" id="winrate">—</div><div class="mono label" id="tradeCount" style="margin-top:4px">0 trades</div></div>
+<div class="hair" style="background:var(--bg-card);padding:18px;border-radius:16px"><div class="label">Cash / Budget</div><div class="big sm serif mono" id="cash">10000kr</div><div class="mono" style="font-size:10px;color:var(--muted)">500kr per trade • 08:55-17:30 CET</div></div>
 </div>
-<div class="card" style="margin-bottom:14px">
-<div class="label">Trailing-lage (klicka)</div>
-<div class="slider"><button id="btn-low" onclick="setTrail('low')">Låg<br><small>+4% → -2.0%</small></button><button id="btn-medium" class="active" onclick="setTrail('medium')">Mellan<br><small>+3% → -1.2%</small></button><button id="btn-aggressive" onclick="setTrail('aggressive')">Aggressiv<br><small>+2% → -0.8%</small></button></div>
+
+<div class="hair" style="background:var(--bg-card);padding:16px;border-radius:16px;margin-top:14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+<div><div class="label">Trailing-läge</div><div style="display:flex;gap:8px;margin-top:8px"><button class="t" id="btn-low" onclick="setTrail('low')">Låg<br><small>+4% → -2.0%</small></button><button class="t active" id="btn-medium" onclick="setTrail('medium')">Mellan<br><small>+3% → -1.2%</small></button><button class="t" id="btn-aggressive" onclick="setTrail('aggressive')">Aggressiv<br><small>+2% → -0.8%</small></button></div></div>
+<div class="mono" style="font-size:11px;color:var(--muted);max-width:34ch">Grön = vinst låst med trailing. Röd = stop loss. Färg endast på siffror, som du ville.</div>
 </div>
-<div class="row">
-<div class="card"><div class="label">Oppna positioner (max 3)</div><table><thead><tr><th>Cert</th><th>Entry</th><th>Nu / Trail</th><th>P/L</th></tr></thead><tbody id="posBody"></tbody></table></div>
-<div><div class="card" style="margin-bottom:14px"><div class="label">Signaler</div><div id="signals"></div></div><div class="card"><div class="label">Nyheter</div><div id="news"></div></div></div>
+</section>
+
+<div class="row2">
+<div><div class="fig" style="margin:10px 0">fig. 02 — Öppna positioner</div><table class="table"><thead><tr><th>№ Cert</th><th>Entry → Nu</th><th>Trail</th><th>P/L inkl avg</th></tr></thead><tbody id="posBody"></tbody></table></div>
+<div><div class="fig">fig. 03 — Signaler just nu</div><div id="signals" style="margin-top:10px"></div><div class="fig" style="margin-top:28px">fig. 04 — Nyheter (Yahoo, regelbaserat)</div><div id="news" style="margin-top:10px"></div></div>
 </div>
-<div class="card" style="margin-top:14px"><div class="label">Stangda trades</div><table><thead><tr><th>Tid</th><th>Cert</th><th>P/L</th><th>Anledning</th></tr></thead><tbody id="histBody"></tbody></table></div>
-<div class="card" style="margin-top:14px"><div class="label">Render - hall vaken + Market Hours</div><div style="font-size:12px;color:var(--muted)">Trading endast 08:55-17:30 CET. Lagg i UptimeRobot: <code id="pingUrl"></code><br>Ping: <span id="pingStatus">-</span></div></div>
+
+<div style="margin-top:24px"><div class="fig">fig. 05 — Stängda trades</div><table class="table" style="margin-top:10px"><thead><tr><th>Tid CET</th><th>Cert</th><th>P/L</th><th>Anledning</th></tr></thead><tbody id="histBody"></tbody></table></div>
+
+<div class="hair-t" style="margin-top:28px;padding:16px 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px"><span class="mono" style="font-size:10px;color:var(--faint);text-transform:uppercase">© Protokoll — ej rådgivning • Spread+ courtage räknat • Market hours 08:55-17:30 CET • UptimeRobot → /api/ping var 5e min</span><span class="mono" style="font-size:10px;color:var(--faint)" id="pingInfo"></span></div>
 </div>
+
 <script>
 let mode=localStorage.getItem('trailMode')||'medium';
-function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme');const next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);localStorage.setItem('theme',next);document.getElementById('themeToggle').innerText=next==='dark'?'Ljust':'Mörkt';}
-document.getElementById('themeToggle').onclick=toggleTheme;const saved=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-theme',saved);document.getElementById('themeToggle').innerText=saved==='dark'?'Ljust':'Mörkt';
-function setTrail(m){mode=m;localStorage.setItem('trailMode',m);document.querySelectorAll('.slider button').forEach(b=>b.classList.remove('active'));document.getElementById('btn-'+m).classList.add('active');fetch('/api/set-trailing/'+m);}
-setTrail(mode);
+function toggleTheme(){const cur=document.documentElement.getAttribute('data-theme');const next=cur==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',next);localStorage.setItem('theme',next);document.getElementById('themeToggle').innerText=next==='dark'?'☀️ Ljust':'🌙 Mörkt';}
+document.getElementById('themeToggle').onclick=toggleTheme;
+const saved=localStorage.getItem('theme')||'light';document.documentElement.setAttribute('data-theme',saved);document.getElementById('themeToggle').innerText=saved==='dark'?'☀️ Ljust':'🌙 Mörkt';
+function setTrail(m){mode=m;localStorage.setItem('trailMode',m);document.querySelectorAll('button.t').forEach(b=>b.classList.remove('active'));document.getElementById('btn-'+m).classList.add('active');fetch('/api/set-trailing/'+m);}
+function fmtMoney(v){const s=v>=0?'+':'';return s+v.toFixed(0)+'kr';}
+function colorCls(v){return v>=0?'pos':'neg';}
 async function load(){
  try{
   const r=await fetch('/api/status');const data=await r.json();const p=data.portfolio;const scan=data.last_scan;
-  document.getElementById('statusBadge').innerText=scan.status||'OK';document.getElementById('timeBadge').innerText=scan.cet_time?new Date(scan.cet_time).toLocaleTimeString('sv-SE'):'';
+  document.getElementById('statusBadge').innerText=scan.status||'OK';
+  const cet=scan.cet_time?new Date(scan.cet_time):new Date();
+  document.getElementById('cetTime').innerText=cet.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'})+' CET';
+  // T-minus to 17:30
+  const close=new Date(cet);close.setHours(17,30,0,0);let diff=close-cet; if(diff<0) diff=0; const h=Math.floor(diff/3600000);const m=Math.floor((diff%3600000)/60000);document.getElementById('tMinus').innerText='T− '+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+' till close';
   document.getElementById('cash').innerText=Math.round(p.cash)+'kr';
-  document.getElementById('dailyPnL').innerText=(p.daily_pnl>=0?'+':'')+p.daily_pnl.toFixed(0)+' / -250kr';
-  const total=p.history.reduce((a,h)=>a+h.pnl,0);document.getElementById('totalPnL').innerText=(total>=0?'+':'')+total.toFixed(0)+'kr';
+  const daily=p.daily_pnl;document.getElementById('dailyPnL').innerHTML=`<span class="${colorCls(daily)}">${fmtMoney(daily)}</span> <span style="color:var(--faint)">/ -250kr</span>`;document.getElementById('dailyPnL').className='big sm serif mono';
+  const total=p.history.reduce((a,h)=>a+h.pnl,0);document.getElementById('totalPnL').innerHTML=`<span class="${colorCls(total)}">${fmtMoney(total)}</span>`;document.getElementById('totalPnL').className='big serif mono';
   document.getElementById('winrate').innerText=p.history.length?Math.round(p.history.filter(h=>h.pnl>0).length/p.history.length*100)+'%':'—';
-  document.getElementById('tradeCount').innerText=p.history.length+' trades';
-  const pb=document.getElementById('posBody');pb.innerHTML='';p.positions.forEach(pos=>{const cur=pos.current_cert_value;const exitV=pos.size_sek*(cur/100);const net=exitV-exitV*0.007-Math.max(exitV*0.0025,1);const pnl=net-pos.size_sek-pos.spread_paid-pos.courtage_paid;pb.innerHTML+=`<tr><td><span class="pill ${pos.direction==='BEAR'?'bear':''}">${pos.direction}</span> ${pos.name}</td><td>${pos.entry_price.toFixed(2)} -> ${cur.toFixed(1)}</td><td>${pos.trailing_active?'Trail '+pos.trailing_stop.toFixed(1):'Vantar'}</td><td class="${pnl>=0?'green':'red'}">${pnl.toFixed(1)}kr</td></tr>`;});if(!p.positions.length)pb.innerHTML='<tr><td colspan=4>Inga oppna</td></tr>';
-  const sDiv=document.getElementById('signals');sDiv.innerHTML='';(scan.signals||[]).slice(0,6).forEach(s=>{sDiv.innerHTML+=`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><b>${s.name}</b> ${s.price.toFixed(2)}<br><small>${s.details.trend||''}</small></div><div>${s.score.toFixed(0)}</div></div>`;});
-  const nDiv=document.getElementById('news');nDiv.innerHTML='';(scan.news||[]).forEach(n=>{nDiv.innerHTML+=`<div class="news"><b>${n.ticker}</b> ${n.title}</div>`;});
-  const hb=document.getElementById('histBody');hb.innerHTML='';p.history.slice(-10).reverse().forEach(h=>{hb.innerHTML+=`<tr><td>${new Date(h.exit_time).toLocaleTimeString('sv-SE')}</td><td>${h.direction} ${h.name}</td><td class="${h.pnl>=0?'green':'red'}">${h.pnl.toFixed(1)}kr</td><td style="font-size:11px">${h.reason}</td></tr>`;});
-  document.getElementById('pingUrl').innerText=location.origin+'/api/ping';
- }catch(e){} }
-load();setInterval(load,15000);
-</script></body></html>
+  document.getElementById('tradeCount').innerText=p.history.length+' trades stängda';
+  const pb=document.getElementById('posBody');pb.innerHTML='';
+  p.positions.forEach((pos,i)=>{
+   const cur=pos.current_cert_value;const exitV=pos.size_sek*(cur/100);const net=exitV-exitV*0.007-Math.max(exitV*0.0025,1);const pnl=net-pos.size_sek-pos.spread_paid-pos.courtage_paid;
+   pb.innerHTML+=`<tr><td><span class="pill ${pos.direction==='BEAR'?'bear':''}">${pos.direction}</span> ${pos.name}<br><span class="mono" style="font-size:10px;color:var(--faint)">${pos.cert}</span></td><td class="mono">${pos.entry_price.toFixed(2)} → ${cur.toFixed(1)}</td><td class="mono">${pos.trailing_active? '<span class="pos">Trail '+pos.trailing_stop.toFixed(1)+'</span>' : 'Väntar +'+(mode==='low'?4:mode==='medium'?3:2)+'%'}</td><td class="mono ${colorCls(pnl)}">${pnl>=0?'+':''}${pnl.toFixed(1)}kr</td></tr>`;
+  });
+  if(!p.positions.length) pb.innerHTML='<tr><td colspan=4 class="mono" style="color:var(--faint)">Inga öppna — market 08:55-17:30 CET</td></tr>';
+  const sDiv=document.getElementById('signals');sDiv.innerHTML='';
+  (scan.signals||[]).slice(0,6).forEach(s=>{
+   const sc=s.score;const col=sc>=78?'pos':sc<=22?'neg':'';
+   sDiv.innerHTML+=`<div class="hair-b" style="padding:10px 0;display:flex;justify-content:space-between"><div><b class="sans" style="font-size:13px">${s.name}</b> <span class="mono" style="color:var(--muted);font-size:11px">${s.price.toFixed(2)}</span><br><span class="mono" style="font-size:10px;color:var(--faint)">${s.details.trend||''} ${s.details.rsi||''}</span></div><div class="mono serif" style="font-weight:800;font-size:18px"><span class="${col}">${sc.toFixed(0)}</span></div></div>`;
+  });
+  const nDiv=document.getElementById('news');nDiv.innerHTML='';
+  (scan.news||[]).forEach(n=>{
+   const sentimentClass=n.sentiment==='pos'?'pos':n.sentiment==='neg'?'neg':'';
+   nDiv.innerHTML+=`<div class="news"><div style="display:flex;justify-content:space-between"><span class="mono" style="font-size:10px;letter-spacing:.08em;text-transform:uppercase">${n.ticker}</span><span class="mono ${sentimentClass}" style="font-size:10px">${n.sentiment}</span></div><div class="serif" style="font-size:13px;line-height:1.3;margin-top:4px">${n.title}</div><div class="mono" style="font-size:10px;color:var(--faint);margin-top:2px">${n.publisher} ${n.boost? (n.boost>0? '+'+n.boost : n.boost):''}</div></div>`;
+  });
+  const hb=document.getElementById('histBody');hb.innerHTML='';
+  p.history.slice(-12).reverse().forEach(h=>{
+   hb.innerHTML+=`<tr><td class="mono" style="font-size:11px">${new Date(h.exit_time).toLocaleTimeString('sv-SE')}</td><td class="mono" style="font-size:11px">${h.direction} ${h.name}</td><td class="mono ${colorCls(h.pnl)}" style="font-weight:700">${h.pnl>=0?'+':''}${h.pnl.toFixed(1)}kr</td><td class="mono" style="font-size:10px;color:var(--muted)">${h.reason}</td></tr>`;
+  });
+  document.getElementById('pingInfo').innerText=location.origin+'/api/ping • '+(scan.market_open?'OPEN':'CLOSED');
+ }catch(e){console.log(e)}
+}
+setTrail(mode);load();setInterval(load,15000);
+</script>
+</body>
+</html>
