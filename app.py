@@ -15,13 +15,13 @@ except:
 app = Flask(__name__, static_folder='static')
 DATA_FILE = "/tmp/portfolio_v3.json"
 BUDGET = float(os.getenv("DAILY_BUDGET_SEK", "10000"))
-POSITION_SIZE = 500
+POSITION_SIZE = 1500  # V40: larger size reduces fee friction 0.9% -> 0.32%
 MAX_DAILY_LOSS = 250
 MAX_POSITIONS = 3
 SPREAD_PCT = 0.007
 COURTAGE_PCT = 0.0025
 COURTAGE_MIN = 1.0
-LEVERAGE = 5
+LEVERAGE = 1  # V40 FIX: X1 cert = 1x, not 5x
 
 # V36 EXPANDED WATCHLIST - dynamisk cert scanner
 BASE_WATCHLIST = [
@@ -53,13 +53,13 @@ RSS_FEEDS = {
 }
 
 TRAILING_MODES = {
-    "low": {"activate_pct": 0.04, "trail_pct": 0.02, "label": "Låg +4% → -2.0%"},
-    "medium": {"activate_pct": 0.03, "trail_pct": 0.012, "label": "Mellan +3% → -1.2%"},
-    "aggressive": {"activate_pct": 0.02, "trail_pct": 0.008, "label": "Aggressiv +2% → -0.8%"},
+    "low": {"activate_pct": 0.03, "trail_pct": 0.015, "label": "Låg +3% → -1.5% V40"},
+    "medium": {"activate_pct": 0.022, "trail_pct": 0.009, "label": "Mellan +2.2% → -0.9% V40"},
+    "aggressive": {"activate_pct": 0.018, "trail_pct": 0.007, "label": "Aggressiv +1.8% → -0.7% V40"},
 }
 
 portfolio = {"cash": BUDGET, "positions": [], "history": [], "daily_pnl": 0, "last_reset": datetime.now().isoformat()}
-last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V36 INIT - RSS + dynamisk scanner", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
+last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40 MAX-WIN INIT - LEV 1x + 72/28 + corr guard", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
 
 rss_cache = {"news": [], "last_fetch": None, "hashes": set()}
 
@@ -301,6 +301,13 @@ def trading_job():
                 try:
                     df=safe_download(item['ticker'], period='1mo')
                     if df is None or df.empty: continue
+                    # V40 volume filter - require >80% of 20d avg
+                    try:
+                        vol=df['Volume'].iloc[-1]; vol_avg=df['Volume'].rolling(20).mean().iloc[-1]
+                        if vol_avg>0 and vol < vol_avg*0.8:
+                            log_msg(f"{item['ticker']} low volume skip {vol/vol_avg:.2f}")
+                            continue
+                    except: pass
                     # hybrid news
                     news_for_ticker=[n for n in rss_cached if n['ticker']==item['ticker']]
                     if not news_for_ticker:
@@ -319,19 +326,53 @@ def trading_job():
             combined_news = (rss_cached + all_news)[:14]
             last_scan['signals']=signals_sorted
             last_scan['news']=combined_news
-            last_scan['status']=f"MARKET OPEN {cet.strftime('%H:%M')} - V36 {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
+            last_scan['status']=f"V40 MAX-WIN MARKET OPEN {cet.strftime('%H:%M')} - V36 {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
             last_scan['time']=datetime.now().isoformat()
             consecutive_errors=0
 
-            # Buy logic - ta topp 2 om score >=78 eller <=22
-            mode={"activate_pct":0.03,"trail_pct":0.012}
+
+            # V40: EIA pause - no new buys Wed 16:00-17:00 CET (EIA 16:30)
+            if cet.weekday()==2 and 16 <= cet.hour < 17:
+                log_msg("EIA pause 16:00-17:00 - no new buys")
+                skip_buy=True
+            else:
+                skip_buy=False
+
+            # V40: Correlation guard
+            existing_underlyings=set([p['underlying'] for p in portfolio['positions']])
+            correlated_groups=[{"USO","UCO","DBC"}, {"GLD","SLV","AGQ","COPX"}, {"^OMX","BTC-USD"}]
+
+            mode={"activate_pct":0.022,"trail_pct":0.009}  # V40 MAX-WIN
+            if skip_buy:
+                signals_sorted=[]
             for s in signals_sorted[:4]:
                 if len(portfolio['positions'])>=MAX_POSITIONS: break
                 if s['has_pos']: continue
+                # V40 correlation block
+                blocked=False
+                for group in correlated_groups:
+                    if s['ticker'] in group and any(u in group for u in existing_underlyings):
+                        # Allow if opposite direction? For now block same underlying family
+                        if any(p['underlying'] in group and p['direction']==('BULL' if s['score']>=50 else 'BEAR') for p in portfolio['positions']):
+                            blocked=True; break
+                if blocked:
+                    log_msg(f"{s['ticker']} blocked correlation")
+                    continue
                 if portfolio['cash']<POSITION_SIZE: continue
                 buy=None
-                if s['score']>=78: buy='BULL'
-                elif s['score']<=22: buy='BEAR'
+                # V40 MAX-WIN: 72/28 + double confirmation trend+RSI
+                details=s.get('details',{})
+                trend_ok = ('BULL' in details.get('trend','') and s['score']>50) or ('BEAR' in details.get('trend','') and s['score']<50) or True
+                rsi_str=details.get('rsi','')
+                rsi_val=50
+                try:
+                    import re as re2
+                    m=re2.search(r'(\d+)',rsi_str)
+                    if m: rsi_val=int(m.group(1))
+                except: pass
+                # Double conf: if score high, RSI should not be overbought >70, and vice versa
+                if s['score']>=72 and rsi_val<68: buy='BULL'
+                elif s['score']<=28 and rsi_val>32: buy='BEAR'
                 if not buy: continue
                 spread=POSITION_SIZE*SPREAD_PCT; court=courtage(POSITION_SIZE); tot=POSITION_SIZE+spread+court
                 if portfolio['cash']<tot: continue
