@@ -89,7 +89,10 @@ def score_ticker(df, news_list):
     if df.empty or len(df)<30: return 50,{}
     close=df['Close']; sma20=close.rolling(20).mean().iloc[-1]; sma50=close.rolling(50).mean().iloc[-1]
     diff=close.diff(); gain=diff.where(diff>0,0).rolling(14).mean().iloc[-1]; loss=-diff.where(diff<0,0).rolling(14).mean().iloc[-1]
-    rsi=100-(100/(1+gain/max(0.001,loss))) if loss!=0 else 50)
+    if loss!=0:
+        rsi=100-(100/(1+gain/max(0.001,loss)))
+    else:
+        rsi=50
     atr=(df['High']-df['Low']).rolling(14).mean().iloc[-1]/close.iloc[-1] if close.iloc[-1]!=0 else 0
     price=close.iloc[-1]
     score=50; det={}
