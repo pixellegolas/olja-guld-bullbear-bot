@@ -133,20 +133,34 @@ function render(data){
   }).join('');
  }
 
- // FIG 03 signals
+  // FIG 03 signals - V40.17 ROBUST
  const sigDiv=document.getElementById('signals');
- if(signals.length===0){ sigDiv.innerHTML='<div class="mono">Inga signaler just nu — scannar...</div>'; }
- else{
+ if(!signals || signals.length===0){ 
+  sigDiv.innerHTML='<div class="mono">Inga signaler just nu — scannar... (debug: LS signals='+(ls.signals?ls.signals.length:0)+', API lastScan='+ (ls.time||'none') +')</div>'; 
+ }else{
   sigDiv.innerHTML=signals.map(s=>{
-   const score10=(s.score/10).toFixed(1); const isBull=s.score>=55; const boost=s.details?.news_boost||0;
-   const boostCls=boost>0?'pos':boost<0?'neg':'';
-   return `<div style="border-top:1px solid var(--hair);padding:20px 0">
-   <div style="display:flex;justify-content:space-between"><span class="mono">${s.ticker} / ${s.name}</span><span class="mono">NEWS BOOST <span class="${boostCls}" style="font-size:14px">${boost>0?'+':''}${boost.toFixed(1)}</span></span></div>
-   <div style="display:flex;gap:16px;align-items:center;margin-top:12px"><div class="big ${s.score>=70?'pos':s.score<=30?'neg':''}" style="font-size:42px">${score10}</div><div><div style="font-weight:600">${isBull?'↗ Bullish':'↘ Bearish'} • Score ${s.score.toFixed(0)}</div><div class="mono">${s.details?.rsi||''} • ${s.details?.trend||''}</div></div></div>
-   <div style="margin-top:12px;height:2px;background:var(--hair);position:relative"><div style="position:absolute;left:0;top:0;height:100%;background:${s.score>=70?'var(--pos)':'var(--text)'};width:${s.score}%"></div></div>
-   <div class="mono" style="margin-top:8px">${s.score>=70?'Stark signal':s.score<=30?'Stark bear signal':'Neutral signal'} • ${s.has_pos?'HAR POSITION':'INGEN POSITION'}</div>
-   </div>`
+   try{
+     const rawScore = typeof s.score === 'number' ? s.score : 50;
+     const score100 = rawScore > 10 ? rawScore : rawScore*10; // handle both 0-10 and 0-100
+     const score10 = (score100/10).toFixed(1);
+     const isBull = score100>=55;
+     const boost = (s.details && s.details.news_boost) ? s.details.news_boost : 0;
+     const boostCls = boost>0?'pos':boost<0?'neg':'';
+     const rsi = s.details?.rsi || 'RSI 50';
+     const trend = s.details?.trend || 'Trend 0%';
+     const price = s.price || s.details?.price || 0;
+     return `<div style="border-top:1px solid var(--hair);padding:20px 0">
+     <div style="display:flex;justify-content:space-between"><span class="mono">${s.ticker||'??'} / ${s.name||''} • ${price?price.toFixed(2):''}</span><span class="mono">NEWS BOOST <span class="${boostCls}" style="font-size:14px">${boost>0?'+':''}${boost.toFixed(1)}</span></span></div>
+     <div style="display:flex;gap:16px;align-items:center;margin-top:12px"><div class="big ${score100>=70?'pos':score100<=30?'neg':''}" style="font-size:42px">${score10}</div><div><div style="font-weight:600">${isBull?'↗ Bullish':'↘ Bearish'} • Score ${score100.toFixed(0)}/100 (${score10}/10)</div><div class="mono">${rsi} • ${trend}</div></div></div>
+     <div style="margin-top:12px;height:2px;background:var(--hair);position:relative"><div style="position:absolute;left:0;top:0;height:100%;background:${score100>=70?'var(--pos)':score100<=30?'var(--neg)':'var(--text)'};width:${Math.min(100,score100)}%"></div></div>
+     <div class="mono" style="margin-top:8px">${score100>=70?'Stark BULL signal':score100<=30?'Stark BEAR signal':'Neutral signal'} • ${s.has_pos?'HAR POSITION':'INGEN POSITION'} • CAT ${s.cat||''}</div>
+     </div>`
+   }catch(e){
+     return `<div style="border-top:1px solid var(--hair);padding:12px 0" class="mono">Signal render error ${e} - ${JSON.stringify(s).slice(0,200)}</div>`
+   }
   }).join('');
+ }
+
  }
 
  // FIG 04 news
@@ -175,5 +189,11 @@ function setTrail(m){
 setInterval(fetchStatus,10000);
 fetchStatus();
 </script>
+
+<div style="margin-top:48px;border-top:1px dashed var(--hair);padding-top:12px" class="mono">
+<div id="debugPanel">DEBUG: väntar data...</div>
+<div id="apiStatus">API: laddar...</div>
+<div style="margin-top:8px">Positioner: <span id="posCount">0</span> • <span id="totalPLFooter">+0 kr</span> • <span id="debug">-</span></div>
+</div>
 </body>
 </html>

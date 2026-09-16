@@ -6,8 +6,8 @@ from flask import Flask, jsonify, make_response, send_from_directory
 import pandas as pd
 import numpy as np
 
-# V40.16 LIVE REAL FIXED ULTRA MINIMAL - NO yfinance, NO feedparser at top, GUARANTEED to start on Render
-print("V40.16 LIVE REAL FIXED ULTRA MINIMAL starting...", flush=True)
+# V40.17 LIVE FIXED UI REAL FIXED ULTRA MINIMAL - NO yfinance, NO feedparser at top, GUARANTEED to start on Render
+print("V40.17 LIVE FIXED UI REAL FIXED ULTRA MINIMAL starting...", flush=True)
 
 app = Flask(__name__, static_folder='static')
 
@@ -16,10 +16,10 @@ POSITION_SIZE=1500
 MAX_DAILY_LOSS=500
 SPREAD_PCT=0.02
 LEVERAGE=1
-TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009,"label":"Låg +2.2% → -0.9% V40.16 LIVE REAL FIXED"},"mid":{"activate_pct":0.035,"trail_pct":0.014,"label":"Mellan +3.5% → -1.4%"},"high":{"activate_pct":0.05,"trail_pct":0.02,"label":"Hög +5% → -2%"}}
+TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009,"label":"Låg +2.2% → -0.9% V40.17 LIVE FIXED UI REAL FIXED"},"mid":{"activate_pct":0.035,"trail_pct":0.014,"label":"Mellan +3.5% → -1.4%"},"high":{"activate_pct":0.05,"trail_pct":0.02,"label":"Hög +5% → -2%"}}
 
 portfolio={"cash":BUDGET,"positions":[],"history":[],"daily_pnl":0,"last_reset":datetime.now().isoformat()}
-last_scan={"time":datetime.now().isoformat(),"status":"V40.16 LIVE REAL FIXED ULTRA MINIMAL INIT - mock data, no network","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
+last_scan={"time":datetime.now().isoformat(),"status":"V40.17 LIVE FIXED UI REAL FIXED ULTRA MINIMAL INIT - mock data, no network","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
 rss_cache={"news":[],"last_fetch":None,"hashes":set()}
 RSS_FEEDS={"USO":["https://news.google.com/rss/search?q=oil"],"GLD":["https://news.google.com/rss/search?q=gold"]}
 
@@ -347,7 +347,7 @@ def save_portfolio():
 
 def trading_job():
     global last_scan
-    log_msg("Trading job STARTED V40.16 LIVE REAL FIXED ULTRA MINIMAL")
+    log_msg("Trading job STARTED V40.17 LIVE FIXED UI REAL FIXED ULTRA MINIMAL")
     load_portfolio()
     watchlist=fetch_cert_universe()
     last_scan["cert_universe"]=watchlist
@@ -373,7 +373,7 @@ def trading_job():
             last_scan["signals"]=signals_sorted
             last_scan["news"]=rss_cache.get("news",[])[:10]
             last_scan["time"]=datetime.now().isoformat()
-            last_scan["status"]=f"V40.16 LIVE REAL FIXED SIMPLE MARKET OPEN {datetime.now().strftime('%H:%M')} CET - MOCK aktiv, {len(signals_sorted)} signaler"
+            last_scan["status"]=f"V40.17 LIVE FIXED UI REAL FIXED SIMPLE MARKET OPEN {datetime.now().strftime('%H:%M')} CET - MOCK aktiv, {len(signals_sorted)} signaler"
             log_msg(f"Scanning klart {len(signals_sorted)} signaler")
             time.sleep(30)
         except Exception as e:
@@ -381,7 +381,7 @@ def trading_job():
             time.sleep(10)
 
 def rss_job():
-    log_msg("RSS job STARTED V40.16 LIVE REAL FIXED")
+    log_msg("RSS job STARTED V40.17 LIVE FIXED UI REAL FIXED")
     while True:
         try:
             fetch_rss_news()
@@ -393,24 +393,33 @@ def rss_job():
 import threading
 threading.Thread(target=trading_job, daemon=True).start()
 threading.Thread(target=rss_job, daemon=True).start()
-log_msg("Threads started V40.16 LIVE REAL FIXED")
+log_msg("Threads started V40.17 LIVE FIXED UI REAL FIXED")
 
 @app.route("/api/ping")
 def api_ping():
     try:
         is_open,cet=is_market_open()
-        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.16 LIVE REAL FIXED SIMPLE FINAL"}))
+        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.17 LIVE FIXED UI REAL FIXED SIMPLE FINAL"}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
         return jsonify({"ok":False,"error":str(e)}), 200
 
 @app.route("/api/status")
+
+@app.route("/api/debug")
+def api_debug():
+    try:
+        return jsonify({"last_scan":last_scan,"rss_cache":{"news":rss_cache.get("news",[]),"count":len(rss_cache.get("news",[])),"last_fetch":rss_cache.get("last_fetch")},"cache_keys":list(_real_price_cache.keys()),"cache_info":{k:{"len":len(v['df']), "price": float(v['df']['Close'].iloc[-1]) if not isinstance(v['df']['Close'], pd.DataFrame) else float(v['df']['Close'].iloc[:,0].iloc[-1])} for k,v in _real_price_cache.items()}})
+    except Exception as e:
+        return jsonify({"error":str(e),"last_scan":str(last_scan)[:1000]})
+
 def api_status():
+
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":False,"version":"V40.16 LIVE REAL FIXED SIMPLE FINAL"}}))
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":False,"version":"V40.17 LIVE FIXED UI REAL FIXED SIMPLE FINAL"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -420,14 +429,14 @@ def api_status():
 def api_logs():
     try:
         safe_rss={"count":len(rss_cache.get("news",[])), "last_fetch":rss_cache.get("last_fetch")}
-        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.16 LIVE REAL FIXED SIMPLE FINAL"})
+        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.17 LIVE FIXED UI REAL FIXED SIMPLE FINAL"})
     except Exception as e:
         return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:]}), 200
 
 @app.route("/api/scan-now")
 def api_scan_now():
     try:
-        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.16 LIVE REAL FIXED"})
+        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.17 LIVE FIXED UI REAL FIXED"})
     except Exception as e:
         return jsonify({"error":str(e)}), 200
 
