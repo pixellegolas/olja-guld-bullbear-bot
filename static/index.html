@@ -2,7 +2,7 @@
 <html lang="sv">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bull/Bear Bot • V40.22</title>
+<title>Bull/Bear Bot • V40.23 TRADE</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#fcfcfa;--card:#fff;--hair:#e5e5e0;--text:#0f0f0f;--muted:#6b6b6a;--pos:#12a150;--neg:#e5484d;--mono:'JetBrains Mono',monospace;--serif:'Playfair Display',serif;--sans:'Inter',sans-serif}
@@ -22,14 +22,14 @@
 <body>
 <div class="top">
 <div class="mono">UTGÅVA 01 • BULLE BEAR • <span id="statusTop">LADDAR...</span> • <span id="scanTime">--:--</span></div>
-<div class="mono">V40.22 FINAL • SCAN <span id="lastScan">--:--:--</span> • <span id="apiStat">API: ...</span></div>
+<div class="mono">V40.23 TRADE FINAL • SCAN <span id="lastScan">--:--:--</span> • <span id="apiStat">API: ...</span></div>
 </div>
 
 <div style="max-width:1280px;margin:0 auto;padding:48px 24px">
 <h1 class="serif" style="font-size:clamp(48px,8vw,84px);margin:0 0 24px 0;line-height:0.9">Bull/Bear Bot</h1>
-<p style="max-width:560px;color:var(--muted);line-height:1.6">Automatiserad bot som scannar 10 cert - olja, guld, silver, natgas, koppar, OMX, BTC. Score 0-10, BULL 7.8+ BEAR 2.2-, trailing ATR(14)x1.5. Aktiv 08:55-17:30 CET. V40.22 FINAL.</p>
+<p style="max-width:560px;color:var(--muted);line-height:1.6">Automatiserad bot som scannar 10 cert - olja, guld, silver, natgas, koppar, OMX, BTC. Score 0-10, BULL 7.8+ BEAR 2.2-, trailing ATR(14)x1.5. Aktiv 08:55-17:30 CET. V40.23 TRADE FINAL.</p>
 
-<div style="margin-top:64px;border-top:1px solid var(--hair);padding-top:12px;display:flex;justify-content:space-between" class="mono"><span>FIG. 01 — ÖVERSIKT</span><span id="cacheNote">V40.22 • 10 CERT • MOCK+REAL FALLBACK</span></div>
+<div style="margin-top:64px;border-top:1px solid var(--hair);padding-top:12px;display:flex;justify-content:space-between" class="mono"><span>FIG. 01 — ÖVERSIKT</span><span id="cacheNote">V40.23 TRADE • 10 CERT • TRADE ENABLED 10 CERT MOCK</span></div>
 <div class="grid4" id="overview">
 <div class="card"><div class="mono">TOTAL P/L</div><div class="big pos" style="font-size:48px;margin-top:16px" id="totalPL">+0 kr</div><div class="mono" id="totalPLSub">0 avslut</div></div>
 <div class="card"><div class="mono">DAGLIG</div><div class="big pos" style="font-size:48px;margin-top:16px" id="dailyPL">+0 kr</div><div class="mono" id="dailySub">Kassa 10000 kr</div></div>
@@ -38,7 +38,7 @@
 </div>
 
 <div style="margin-top:80px">
-<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px"><span class="mono">FIG. 02</span><h2 class="serif" style="font-size:32px;margin:0">Öppna positioner</h2><span class="mono">V40.22 • 10 CERT • TRAIL ATRx1.5</span></div>
+<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px"><span class="mono">FIG. 02</span><h2 class="serif" style="font-size:32px;margin:0">Öppna positioner</h2><span class="mono">V40.23 TRADE • 10 CERT • TRAIL ATRx1.5</span></div>
 <div style="margin-top:24px;border-top:1px solid var(--hair)"><div style="display:grid;grid-template-columns:40px 1fr 120px 100px;padding:12px 0" class="mono"><span>№</span><span>CERTIFIKAT</span><span>TRAIL</span><span style="text-align:right">P/L</span></div><div id="positions"><div style="padding:24px 0;color:var(--muted)">Inga öppna positioner — market 08:55-17:30 CET. Scannar var 30s.</div></div></div>
 </div>
 
@@ -50,14 +50,14 @@
 <div>
 <div style="display:flex;justify-content:space-between"><span class="mono">FIG. 04</span><h2 class="serif" style="font-size:28px;margin:0">Nyheter</h2></div>
 <div id="news" style="margin-top:32px"><div class="mono">Laddar nyheter...</div></div>
-<div style="margin-top:32px;padding:16px;background:#f5f5f0;border:1px solid var(--hair)"><div class="mono">PROTOKOLL</div><div style="font-size:13px;line-height:1.5;margin-top:8px;color:var(--muted)">Systemet läser rubriker, inte känslor. Sentiment: olja + lagerfall = bullish, guld + stark dollar = bearish. Viktas lätt (max ±1.0) för att inte överstyra tekniskt. V40.22 mock+real fallback.</div></div>
+<div style="margin-top:32px;padding:16px;background:#f5f5f0;border:1px solid var(--hair)"><div class="mono">PROTOKOLL</div><div style="font-size:13px;line-height:1.5;margin-top:8px;color:var(--muted)">Systemet läser rubriker, inte känslor. Sentiment: olja + lagerfall = bullish, guld + stark dollar = bearish. Viktas lätt (max ±1.0) för att inte överstyra tekniskt. V40.23 TRADE mock+real fallback.</div></div>
 </div>
 </div>
 
 <div style="margin-top:80px;border-top:1px dashed var(--hair);padding-top:16px" class="mono">
-<div>DEBUG PANEL V40.22</div>
+<div>DEBUG PANEL V40.23 TRADE</div>
 <div id="debugPanel" style="margin-top:8px;white-space:pre-wrap;word-break:break-all;background:#fff;border:1px solid var(--hair);padding:12px;max-height:200px;overflow:auto">Väntar data...</div>
-<div style="margin-top:12px">API: <span id="apiUrl">/api/status</span> • Version: <span id="ver">V40.22</span></div>
+<div style="margin-top:12px">API: <span id="apiUrl">/api/status</span> • Version: <span id="ver">V40.23 TRADE</span></div>
 </div>
 </div>
 
@@ -91,8 +91,59 @@ function render(data){
   if(safeGet('statusTop')) safeGet('statusTop').textContent=ls.status||'OK';
   if(safeGet('scanTime')) safeGet('scanTime').textContent=ls.time?new Date(ls.time).toLocaleTimeString('sv-SE'):'--:--';
   if(safeGet('lastScan')) safeGet('lastScan').textContent=ls.time?new Date(ls.time).toLocaleTimeString('sv-SE'):'--:--:--';
-  if(safeGet('ver')) safeGet('ver').textContent=data.config?.version||ls.status||'V40.22';
+  if(safeGet('ver')) safeGet('ver').textContent=data.config?.version||ls.status||'V40.23 TRADE';
   if(safeGet('openCount')) safeGet('openCount').textContent=(data.portfolio?.positions?.length||0);
+  if(safeGet('totalPL')) {
+    const hist=data.portfolio?.history||[];
+    const total=hist.reduce((s,h)=>s+(h.pnl||0),0);
+    safeGet('totalPL').textContent=(total>=0?'+':'')+Math.round(total).toLocaleString('sv-SE')+' kr';
+    if(safeGet('totalPL').parentElement) safeGet('totalPL').className='big '+(total>=0?'pos':'neg');
+    if(document.getElementById('totalPLSub')) document.getElementById('totalPLSub').textContent=hist.length+' avslut';
+  }
+  if(safeGet('dailyPL')) {
+    const d=data.portfolio?.daily_pnl||0;
+    safeGet('dailyPL').textContent=(d>=0?'+':'')+Math.round(d).toLocaleString('sv-SE')+' kr';
+    safeGet('dailyPL').className='big '+(d>=0?'pos':'neg');
+  }
+  if(document.getElementById('dailySub')) document.getElementById('dailySub').textContent='Kassa '+Math.round(data.portfolio?.cash||0).toLocaleString('sv-SE')+' kr';
+  if(document.getElementById('winRate')) {
+    const hist=data.portfolio?.history||[];
+    const wins=hist.filter(h=>h.pnl>0).length;
+    const rate=hist.length?Math.round(wins/hist.length*100):0;
+    document.getElementById('winRate').innerHTML=rate+'<span style="font-size:24px">%</span>';
+    document.getElementById('winRate').className='big '+(rate>=50?'pos':'neg');
+    if(document.getElementById('winSub')) document.getElementById('winSub').textContent=wins+' av '+hist.length+' avslut i vinst';
+  }
+  if(document.getElementById('expoSub')) {
+    const pos=data.portfolio?.positions?.length||0;
+    document.getElementById('expoSub').textContent=pos?pos+' aktiva • cash '+Math.round(data.portfolio.cash)+' kr':'INGA ÖPPNA - VÄNTAR 08:55';
+  }
+
+  // FIG 02 positions
+  const posDiv=document.getElementById('positions');
+  if(posDiv){
+    const positions=data.portfolio?.positions||[];
+    if(positions.length===0){
+      posDiv.innerHTML='<div style="padding:24px 0;color:var(--muted)">Inga öppna positioner — market 08:55-17:30 CET (TEST 24h i V40.23). Scannar var 20s. Cash '+(Math.round(data.portfolio?.cash||0))+' kr. History '+ (data.portfolio?.history?.length||0)+' avslut.</div>';
+    }else{
+      posDiv.innerHTML=positions.map((p,i)=>{
+        const cur=p.current_price||p.entry_price;
+        const entry=p.entry_price;
+        let pnlPct=0;
+        if(p.direction==='BULL') pnlPct=(cur-entry)/entry*100;
+        else pnlPct=(entry-cur)/entry*100;
+        const trailActive=p.trailing_active?'TRAIL AKTIV '+ (p.trailing_stop? p.trailing_stop.toFixed(2):''):'TRAIL VÄNTAR';
+        const color=pnlPct>=0?'var(--pos)':'var(--neg)';
+        return `<div style="display:grid;grid-template-columns:40px 1fr 120px 100px;padding:14px 0;border-top:1px solid var(--hair)">
+        <span class="mono">${i+1}</span>
+        <span><b>${p.cert}</b> <span class="mono">${p.underlying} ${p.direction} • ${p.name}</span><br><span class="mono">ENTRY ${entry.toFixed(2)} → NU ${cur.toFixed(2)} • SIZE ${p.size_sek} kr</span></span>
+        <span class="mono">${trailActive}</span>
+        <span class="mono" style="text-align:right;color:${color}">${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%<br>${Math.round(p.size_sek*pnlPct/100)} kr</span>
+        </div>`;
+      }).join('') + `<div style="margin-top:12px" class="mono">History: ${(data.portfolio?.history||[]).slice(-3).map(h=>h.cert+' '+(h.pnl>=0?'+':'')+Math.round(h.pnl)+'kr ('+h.reason+')').join(' | ')||'Inga avslut ännu'}</div>`;
+    }
+  }
+
   // FIG 03
   const sigDiv=safeGet('signals');
   if(!sigDiv) return;
