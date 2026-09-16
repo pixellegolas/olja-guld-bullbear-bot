@@ -6,8 +6,8 @@ from flask import Flask, jsonify, make_response, send_from_directory
 import pandas as pd
 import numpy as np
 
-# V40.13 REAL ULTRA MINIMAL - NO yfinance, NO feedparser at top, GUARANTEED to start on Render
-print("V40.13 REAL ULTRA MINIMAL starting...", flush=True)
+# V40.14 REAL FIXED ULTRA MINIMAL - NO yfinance, NO feedparser at top, GUARANTEED to start on Render
+print("V40.14 REAL FIXED ULTRA MINIMAL starting...", flush=True)
 
 app = Flask(__name__, static_folder='static')
 
@@ -16,10 +16,10 @@ POSITION_SIZE=1500
 MAX_DAILY_LOSS=500
 SPREAD_PCT=0.02
 LEVERAGE=1
-TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009,"label":"Låg +2.2% → -0.9% V40.13 REAL"},"mid":{"activate_pct":0.035,"trail_pct":0.014,"label":"Mellan +3.5% → -1.4%"},"high":{"activate_pct":0.05,"trail_pct":0.02,"label":"Hög +5% → -2%"}}
+TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009,"label":"Låg +2.2% → -0.9% V40.14 REAL FIXED"},"mid":{"activate_pct":0.035,"trail_pct":0.014,"label":"Mellan +3.5% → -1.4%"},"high":{"activate_pct":0.05,"trail_pct":0.02,"label":"Hög +5% → -2%"}}
 
 portfolio={"cash":BUDGET,"positions":[],"history":[],"daily_pnl":0,"last_reset":datetime.now().isoformat()}
-last_scan={"time":datetime.now().isoformat(),"status":"V40.13 REAL ULTRA MINIMAL INIT - mock data, no network","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
+last_scan={"time":datetime.now().isoformat(),"status":"V40.14 REAL FIXED ULTRA MINIMAL INIT - mock data, no network","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
 rss_cache={"news":[],"last_fetch":None,"hashes":set()}
 RSS_FEEDS={"USO":["https://news.google.com/rss/search?q=oil"],"GLD":["https://news.google.com/rss/search?q=gold"]}
 
@@ -84,7 +84,7 @@ def safe_download(ticker, period='1mo'):
             # Try Yahoo as backup
             try:
                 import yfinance as yf
-                df=yf.download(ticker, period="5d", interval="1d", progress=False, timeout=8, auto_adjust=True)
+                df=yf.download(ticker, period="1mo", interval="1d", progress=False, timeout=8, auto_adjust=True)
                 if df is not None and not df.empty and len(df)>=3:
                     _real_price_cache[ticker]={'df':df,'ts':time.time()}
                     log_msg(f"{ticker} BG REAL YF cached {len(df)}")
@@ -160,41 +160,62 @@ def fetch_cert_universe():
 
 
 
+
+
 def score_ticker(df, news):
     try:
-        if df is None or len(df)<10:
+        if df is None or len(df)<3:
             return None, {}
         close=df['Close']
-        delta=close.diff()
-        gain=delta.where(delta>0,0).rolling(14).mean()
-        loss=(-delta.where(delta<0,0)).rolling(14).mean()
-        rs=gain/loss
-        rsi=100-(100/(1+rs))
+        # Handle MultiIndex from yfinance
+        if isinstance(close, pd.DataFrame):
+            close=close.iloc[:,0]
         try:
-            rsi_val=float(rsi.iloc[-1])
-            if pd.isna(rsi_val): rsi_val=50
-        except:
             rsi_val=50
-        ma20=float(close.rolling(20).mean().iloc[-1])
-        ma5=float(close.rolling(5).mean().iloc[-1])
-        price=float(close.iloc[-1])
+            if len(close)>=14:
+                delta=close.diff()
+                gain=delta.where(delta>0,0).rolling(14).mean()
+                loss=(-delta.where(delta<0,0)).rolling(14).mean()
+                rs=gain/loss
+                rsi=100-(100/(1+rs))
+                try:
+                    rsi_val=float(rsi.iloc[-1])
+                    if pd.isna(rsi_val): rsi_val=50
+                except:
+                    rsi_val=50
+            ma20=float(close.rolling(min(20,len(close))).mean().iloc[-1])
+            ma5=float(close.rolling(min(5,len(close))).mean().iloc[-1])
+            price=float(close.iloc[-1])
+            prev=float(close.iloc[-2]) if len(close)>=2 else price
+        except Exception as ee:
+            log_msg(f"score calc {ee}")
+            price=float(close.iloc[-1]) if len(close)>=1 else 100
+            ma20=price
+            ma5=price
+            rsi_val=50
+            prev=price
+
         score=50
         if ma5>ma20: score+=12
-        else: score-=8
+        else: score-=5
+        if price>prev: score+=8
         if 35<rsi_val<65: score+=10
         elif rsi_val<30: score+=15
-        elif rsi_val>70: score-=10
-        # news sentiment
-        news_score=sum([n.get('sentiment',0) for n in news])
-        score+=int(news_score*15)
-        # random to make different scores
-        score+=int(np.random.randn()*4)
+        elif rsi_val>70: score-=8
+
+        news_score=sum([n.get('sentiment',0) for n in news]) if news else 0
+        score+=int(news_score*12)
+        score+=int(np.random.randn()*3)
         score=max(5,min(95,int(score)))
-        details={"rsi":f"RSI {rsi_val:.0f}","ma":f"MA5 {ma5:.1f} vs MA20 {ma20:.1f}","price":price,"news":f"{len(news)} nyheter"}
+        details={"rsi":f"RSI {rsi_val:.0f}","ma":f"MA5 {ma5:.1f} vs MA20 {ma20:.1f}","price":price,"news":f"{len(news)} nyheter" if news else "no news"}
         return score, details
     except Exception as e:
         log_msg(f"score error {e}")
-        return 50, {"rsi":"RSI 50","ma":"MA ok","price":0}
+        try:
+            price=float(df['Close'].iloc[-1]) if df is not None and len(df)>=1 else 100
+        except:
+            price=100
+        return 50, {"rsi":"RSI 50","ma":"MA ok","price":price}
 
 
 def get_news_hybrid(ticker, df):
@@ -218,7 +239,7 @@ def save_portfolio():
 
 def trading_job():
     global last_scan
-    log_msg("Trading job STARTED V40.13 REAL ULTRA MINIMAL")
+    log_msg("Trading job STARTED V40.14 REAL FIXED ULTRA MINIMAL")
     load_portfolio()
     watchlist=fetch_cert_universe()
     last_scan["cert_universe"]=watchlist
@@ -244,7 +265,7 @@ def trading_job():
             last_scan["signals"]=signals_sorted
             last_scan["news"]=rss_cached
             last_scan["time"]=datetime.now().isoformat()
-            last_scan["status"]=f"V40.13 REAL SIMPLE MARKET OPEN {datetime.now().strftime('%H:%M')} CET - MOCK aktiv, {len(signals_sorted)} signaler"
+            last_scan["status"]=f"V40.14 REAL FIXED SIMPLE MARKET OPEN {datetime.now().strftime('%H:%M')} CET - MOCK aktiv, {len(signals_sorted)} signaler"
             log_msg(f"Scanning klart {len(signals_sorted)} signaler")
             time.sleep(30)
         except Exception as e:
@@ -252,7 +273,7 @@ def trading_job():
             time.sleep(10)
 
 def rss_job():
-    log_msg("RSS job STARTED V40.13 REAL")
+    log_msg("RSS job STARTED V40.14 REAL FIXED")
     while True:
         try:
             fetch_rss_news()
@@ -264,13 +285,13 @@ def rss_job():
 import threading
 threading.Thread(target=trading_job, daemon=True).start()
 threading.Thread(target=rss_job, daemon=True).start()
-log_msg("Threads started V40.13 REAL")
+log_msg("Threads started V40.14 REAL FIXED")
 
 @app.route("/api/ping")
 def api_ping():
     try:
         is_open,cet=is_market_open()
-        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.13 REAL SIMPLE FINAL"}))
+        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.14 REAL FIXED SIMPLE FINAL"}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -281,7 +302,7 @@ def api_status():
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":False,"version":"V40.13 REAL SIMPLE FINAL"}}))
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":False,"version":"V40.14 REAL FIXED SIMPLE FINAL"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -291,14 +312,14 @@ def api_status():
 def api_logs():
     try:
         safe_rss={"count":len(rss_cache.get("news",[])), "last_fetch":rss_cache.get("last_fetch")}
-        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.13 REAL SIMPLE FINAL"})
+        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.14 REAL FIXED SIMPLE FINAL"})
     except Exception as e:
         return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:]}), 200
 
 @app.route("/api/scan-now")
 def api_scan_now():
     try:
-        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.13 REAL"})
+        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.14 REAL FIXED"})
     except Exception as e:
         return jsonify({"error":str(e)}), 200
 
