@@ -1,8 +1,6 @@
 flask
-yfinance
 pandas
 requests
 gunicorn
 feedparser
 lxml
-curl_cffi
