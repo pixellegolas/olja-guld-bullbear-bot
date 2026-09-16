@@ -94,12 +94,41 @@ def is_market_open():
     open_t=cet.replace(hour=8,minute=55,second=0); close_t=cet.replace(hour=17,minute=30,second=0)
     return open_t<=cet<=close_t, cet
 
+
 def fetch_rss_news():
-    """V40.4 FINAL: Google News RSS var 2-3 min - mycket snabbare än Yahoo"""
-    all_news=[]
-    if not HAS_FEEDPARSER:
-        log_msg("feedparser saknas, kör fallback")
+    try:
+        if not HAS_FEEDPARSER:
+            return []
+        import feedparser
+        news=[]
+        for ticker, urls in RSS_FEEDS.items():
+            for url in urls[:1]:
+                try:
+                    feed=feedparser.parse(url)
+                    for e in feed.entries[:3]:
+                        title=getattr(e,'title','')
+                        h=hash(title)
+                        if h in rss_cache["hashes"]:
+                            continue
+                        rss_cache["hashes"].add(h)
+                        if len(rss_cache["hashes"])>500:
+                            rss_cache["hashes"]=set(list(rss_cache["hashes"])[-300:])
+                        lt=title.lower()
+                        sent=0
+                        if any(w in lt for w in ["surge","rise","jump","bull","gain"]): sent=0.5
+                        if any(w in lt for w in ["fall","drop","bear","loss","crash"]): sent=-0.5
+                        news.append({"ticker":ticker,"title":title[:120],"sentiment":sent,"time":datetime.now().isoformat()})
+                except Exception as e:
+                    log_msg(f"RSS {ticker} {e}")
+                    continue
+        rss_cache["news"]=news[:20]
+        rss_cache["last_fetch"]=datetime.now().isoformat()
+        log_msg(f"RSS fetched {len(news)} headlines")
+        return news
+    except Exception as e:
+        log_msg(f"RSS job error {e}")
         return []
+
     try:
         for ticker, urls in RSS_FEEDS.items():
             for url in urls:
@@ -229,13 +258,39 @@ def score_ticker(df, news_list):
         log_msg(f"score error: {e}")
         return 50,{"err":str(e)}
 
+
 def safe_download(ticker, period='1mo'):
-    try:
-        df=yf.download(ticker, period=period, interval='1d', progress=False, timeout=15)
-        return df
-    except Exception as e:
-        log_msg(f"download {ticker} {e}")
+    import threading
+    result={'df':None}
+    def _do():
+        try:
+            import yfinance as yf
+            try:
+                from curl_cffi import requests as curl_req
+                session = curl_req.Session(impersonate="chrome")
+                df=yf.download(ticker, period=period, interval='1d', progress=False, timeout=8, auto_adjust=True, session=session)
+            except Exception:
+                df=yf.download(ticker, period=period, interval='1d', progress=False, timeout=8, auto_adjust=True)
+            result['df']=df
+            if df is not None and not df.empty:
+                try:
+                    close_val=float(df['Close'].iloc[-1])
+                except:
+                    close_val=0
+                log_msg(f"{ticker} OK {len(df)} bars {close_val:.2f}")
+            else:
+                log_msg(f"{ticker} EMPTY")
+        except Exception as e:
+            log_msg(f"{ticker} FAIL {e}")
+            result['df']=None
+    t=threading.Thread(target=_do, daemon=True)
+    t.start()
+    t.join(timeout=12)
+    if t.is_alive():
+        log_msg(f"{ticker} TIMEOUT 12s - skip")
         return None
+    return result['df']
+
 
 def rss_job():
     """Kör var 2-3 min, oberoende av trading"""
