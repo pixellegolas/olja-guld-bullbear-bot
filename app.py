@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Flask, jsonify, make_response, send_from_directory
 import numpy as np
 
-print("V40.24 MEMORY OPTIMIZED - LOW MEM + TRADE", flush=True)
+print("V40.25 REAL + MOCK FALLBACK - TRY YFINANCE", flush=True)
 
 app = Flask(__name__, static_folder='static')
 
@@ -16,18 +16,24 @@ MAX_DAILY_LOSS=500
 TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009},"mid":{"activate_pct":0.035,"trail_pct":0.014},"high":{"activate_pct":0.05,"trail_pct":0.02}}
 
 portfolio={"cash":BUDGET,"positions":[],"history":[],"daily_pnl":0,"last_reset":datetime.now().isoformat()}
-last_scan={"time":datetime.now().isoformat(),"status":"V40.24 INIT","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
+last_scan={"time":datetime.now().isoformat(),"status":"V40.25 INIT REAL+MOCK","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
 rss_cache={"news":[],"last_fetch":None}
+yfinance_available=False
+try:
+    import yfinance as yf
+    yfinance_available=True
+    print("yfinance available - REAL prices enabled", flush=True)
+except Exception as e:
+    print(f"yfinance not available {e} - using mock only", flush=True)
 
 def log_msg(msg):
     try:
         ts=datetime.now().strftime("%H:%M:%S")
         entry=f"{ts} {msg}"
         print(entry, flush=True)
-        # Keep log tiny for memory
         last_scan["log"].append(entry)
-        if len(last_scan["log"])>60:
-            last_scan["log"]=last_scan["log"][-60:]
+        if len(last_scan["log"])>70:
+            last_scan["log"]=last_scan["log"][-70:]
     except:
         print(msg, flush=True)
 
@@ -49,22 +55,50 @@ def save_portfolio():
     except Exception as e:
         log_msg(f"save fail {e}")
 
+def mock_prices(ticker):
+    bm={"USO":76.12,"GLD":2654.50,"SLV":31.20,"UNG":13.10,"DBC":26.40,"COPX":42.30,"UCO":34.50,"AGQ":31.80,"BTC-USD":67420,"^OMX":2412}
+    base=bm.get(ticker, 100) * (0.96 + random.random()*0.08)
+    prices=[base]
+    for _ in range(19):
+        prices.append(max(1, prices[-1] + random.gauss(0, base*0.007)))
+    return np.array(prices, dtype=np.float32)
+
 def safe_download(ticker):
-    # ULTRA LOW MEM - no pandas, just numpy arrays
-    try:
-        bm={"USO":76.12,"GLD":2654.50,"SLV":31.20,"UNG":13.10,"DBC":26.40,"COPX":42.30,"UCO":34.50,"AGQ":31.80,"BTC-USD":67420,"^OMX":2412}
-        base=bm.get(ticker, bm.get(ticker.upper().replace("-USD",""), 100))
-        base = base * (0.96 + random.random()*0.08)
-        # Generate 20 prices with numpy only
-        prices=[base]
-        for _ in range(19):
-            prices.append(max(1, prices[-1] + random.gauss(0, base*0.007)))
-        prices=np.array(prices, dtype=np.float32)  # float32 saves memory
-        log_msg(f"{ticker} MOCK {prices[-1]:.2f}")
-        return prices
-    except Exception as e:
-        log_msg(f"{ticker} FAIL {e}")
-        return np.array([100.0,101.0,100.5,101.2,100.8], dtype=np.float32)
+    # TRY REAL FIRST, FALLBACK TO MOCK
+    if yfinance_available:
+        try:
+            import yfinance as yf
+            # Use fast timeout, small period to save memory
+            df = yf.download(ticker, period="5d", interval="1d", progress=False, timeout=5, threads=False)
+            if df is not None and not df.empty and 'Close' in df.columns:
+                # Handle multiindex from yfinance
+                close_series = df['Close']
+                if hasattr(close_series, 'values'):
+                    vals = close_series.values
+                    # flatten if 2D
+                    if len(vals.shape)>1:
+                        vals = vals.flatten()
+                    # Remove NaN
+                    vals = vals[~np.isnan(vals)]
+                    if len(vals)>=3:
+                        # Pad to 20 with last values + small noise for MA calculation
+                        if len(vals)<20:
+                            last=vals[-1]
+                            extra=[last + random.gauss(0, last*0.005) for _ in range(20-len(vals))]
+                            vals = np.concatenate([np.array(extra, dtype=np.float32), vals.astype(np.float32)])
+                        log_msg(f"{ticker} REAL YF {float(vals[-1]):.2f} len {len(vals)}")
+                        return np.array(vals, dtype=np.float32)
+        except Exception as e:
+            # Expected for ^OMX, COPX sometimes, and 429
+            err=str(e)[:80]
+            if "429" in err or "crumb" in err.lower() or "rate" in err.lower():
+                log_msg(f"{ticker} YF 429 rate-limited -> MOCK fallback")
+            else:
+                log_msg(f"{ticker} YF fail {err} -> MOCK")
+    # FALLBACK MOCK
+    prices=mock_prices(ticker)
+    log_msg(f"{ticker} MOCK {prices[-1]:.2f}")
+    return prices
 
 def fetch_rss_news():
     try:
@@ -101,11 +135,9 @@ def score_ticker(prices, news):
             return 50, {"rsi":"RSI 50","trend":"Trend 0%","price":100,"news_boost":0,"score":5.0}
         price=float(prices[-1])
         prev=float(prices[-2]) if len(prices)>=2 else price
-        # Simple MA without pandas
         ma5=float(np.mean(prices[-5:])) if len(prices)>=5 else price
         ma20=float(np.mean(prices[-20:])) if len(prices)>=20 else float(np.mean(prices))
         trend_strength=(ma5-ma20)/ma20*100 if ma20!=0 else 0
-        # RSI approx - simple
         diff=np.diff(prices[-15:])
         gains=diff[diff>0]
         losses=-diff[diff<0]
@@ -114,7 +146,6 @@ def score_ticker(prices, news):
         rs=avg_gain/avg_loss if avg_loss!=0 else 1
         rsi_val=100-(100/(1+rs))
         rsi_val=max(5,min(95,rsi_val))
-
         score100=50
         if ma5>ma20: score100+=12
         else: score100-=5
@@ -122,7 +153,6 @@ def score_ticker(prices, news):
         if 35<rsi_val<65: score100+=10
         elif rsi_val<30: score100+=15
         elif rsi_val>70: score100-=8
-
         news_score=0
         try:
             if news:
@@ -133,8 +163,9 @@ def score_ticker(prices, news):
             news_score=0
         score100+=int(news_score*12)
         score100+=int(random.gauss(0,3))
-        if random.random()<0.22:
-            score100 = random.choice([82,84,85,18,19,20])
+        # Less aggressive for real prices
+        if random.random()<0.18:
+            score100 = random.choice([82,84,19,20])
         score100=max(5,min(95,int(score100)))
         details={"rsi":f"RSI {rsi_val:.0f}","trend":f"Trend {trend_strength:+.1f}% MA5 {ma5:.1f} vs MA20 {ma20:.1f}","price":price,"news_boost":float(news_score),"score":score100/10.0,"score100":score100}
         return score100, details
@@ -168,18 +199,15 @@ def check_and_close_positions(current_prices):
         for pos in portfolio["positions"]:
             ticker=pos["underlying"]
             cur_price=current_prices.get(ticker)
-            if cur_price is None:
-                continue
+            if cur_price is None: continue
             entry=pos["entry_price"]
             if pos["direction"]=="BULL":
                 pnl_pct=(cur_price-entry)/entry*100
             else:
                 pnl_pct=(entry-cur_price)/entry*100
-
             mode=TRAILING_MODES.get(os.environ.get("TRAILING_MODE","mid"), TRAILING_MODES["mid"])
             activate=mode["activate_pct"]*100
             trail=mode["trail_pct"]*100
-
             if pos["direction"]=="BULL":
                 if cur_price>pos.get("highest",entry):
                     pos["highest"]=cur_price
@@ -196,10 +224,8 @@ def check_and_close_positions(current_prices):
                         pos["trailing_active"]=True
                 if pos.get("trailing_active") and cur_price>=pos.get("trailing_stop",999999):
                     to_close.append((pos,"TRAIL STOP"))
-
             pos["current_price"]=cur_price
             pos["current_cert_value"]=100*(1+pnl_pct/100)
-
         for pos,reason in to_close:
             try:
                 cur_price=current_prices.get(pos["underlying"], pos["entry_price"])
@@ -225,25 +251,28 @@ def check_and_close_positions(current_prices):
         log_msg(f"check_close err {e}")
 
 def trading_job():
-    log_msg("Trading job STARTED V40.24 LOW MEM")
+    log_msg(f"Trading START V40.25 REAL+MOCK yfinance={yfinance_available}")
     load_portfolio()
     watchlist=fetch_cert_universe()
     last_scan["cert_universe"]=watchlist
     fetch_rss_news()
-    log_msg(f"Universe {len(watchlist)} cash {portfolio['cash']:.0f}")
+    log_msg(f"Universe {len(watchlist)} cash {portfolio['cash']:.0f} yfinance {yfinance_available}")
 
     while True:
         try:
             log_msg(f"Scanning {len(watchlist)} START cash={portfolio['cash']:.0f} pos={len(portfolio['positions'])}")
             signals=[]
             current_prices={}
-
+            real_count=0
+            mock_count=0
             for item in watchlist:
                 try:
                     ticker=item['ticker']
                     prices=safe_download(ticker)
                     if prices is None:
                         continue
+                    # Count real vs mock from log heuristic - check if price source was REAL
+                    # We log REAL YF vs MOCK, but here approximate by price stability
                     price=float(prices[-1])
                     current_prices[ticker]=price
                     news_for_ticker=[n for n in rss_cache.get("news",[]) if n["ticker"]==ticker]
@@ -252,12 +281,12 @@ def trading_job():
                     sc,det=score_ticker(prices, news_for_ticker)
                     has_pos=any(p["underlying"]==ticker for p in portfolio["positions"])
                     signals.append({"ticker":ticker,"name":item['name'],"price":price,"score":sc,"details":det,"news":news_for_ticker,"has_pos":has_pos,"cat":item.get('cat','')})
+                    time.sleep(0.6)  # Rate limit to avoid 429 - 0.6s between tickers
                 except Exception as e:
                     log_msg(f"{item['ticker']} err {e}")
                     continue
 
             check_and_close_positions(current_prices)
-
             signals_sorted=sorted(signals,key=lambda x: x['score'],reverse=True)
             if portfolio["daily_pnl"] >= -MAX_DAILY_LOSS:
                 for sig in signals_sorted:
@@ -287,37 +316,37 @@ def trading_job():
             last_scan["signals"]=signals_sorted
             last_scan["news"]=rss_cache.get("news",[])[:10]
             last_scan["time"]=datetime.now().isoformat()
-            last_scan["status"]=f"V40.24 LOW MEM LIVE {datetime.now().strftime('%H:%M')} CET - {len(signals_sorted)} sig, {len(portfolio['positions'])} pos, cash {portfolio['cash']:.0f} kr, daily {portfolio['daily_pnl']:+.0f} kr"
+            last_scan["status"]=f"V40.25 REAL+MOCK LIVE {datetime.now().strftime('%H:%M')} CET - {len(signals_sorted)} sig, {len(portfolio['positions'])} pos, cash {portfolio['cash']:.0f} kr"
             log_msg(f"Klart {len(signals_sorted)} sig, {len(portfolio['positions'])} pos, cash {portfolio['cash']:.0f}")
-            time.sleep(25)
+            time.sleep(35)  # Longer sleep to avoid rate limit
         except Exception as e:
             log_msg(f"trading_job CRASH {e} {traceback.format_exc()[:300]}")
-            time.sleep(5)
+            time.sleep(8)
 
 def rss_job():
-    log_msg("RSS job STARTED V40.24")
+    log_msg("RSS job STARTED V40.25")
     while True:
         try:
             fetch_rss_news()
-            time.sleep(120)
+            time.sleep(180)
         except Exception as e:
             log_msg(f"rss_job {e}")
             time.sleep(30)
 
 threading.Thread(target=trading_job, daemon=True).start()
 threading.Thread(target=rss_job, daemon=True).start()
-log_msg("Threads started V40.24")
+log_msg("Threads started V40.25")
 
 @app.route("/api/ping")
 def api_ping():
-    return jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"version":"V40.24 LOW MEM"})
+    return jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"version":"V40.25 REAL+MOCK","yfinance":yfinance_available})
 
 @app.route("/api/status")
 def api_status():
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"version":"V40.24 LOW MEM"}}))
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"version":"V40.25 REAL+MOCK","yfinance":yfinance_available}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -325,11 +354,11 @@ def api_status():
 
 @app.route("/api/debug")
 def api_debug():
-    return jsonify({"last_scan":last_scan,"rss_cache":{"news":rss_cache.get("news",[]),"count":len(rss_cache.get("news",[]))},"portfolio":portfolio,"version":"V40.24"})
+    return jsonify({"last_scan":last_scan,"rss_cache":{"news":rss_cache.get("news",[]),"count":len(rss_cache.get("news",[]))},"portfolio":portfolio,"version":"V40.25","yfinance":yfinance_available})
 
 @app.route("/api/logs")
 def api_logs():
-    return jsonify({"log":last_scan.get('log',[])[-60:], "status":last_scan.get('status'), "time":last_scan.get('time'), "positions":portfolio["positions"]})
+    return jsonify({"log":last_scan.get('log',[])[-70:], "status":last_scan.get('status'), "time":last_scan.get('time'), "positions":portfolio["positions"]})
 
 @app.route("/api/reset")
 def api_reset():
