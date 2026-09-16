@@ -3,3 +3,6 @@ pandas
 numpy
 requests
 gunicorn
+yfinance
+feedparser
+lxml
