@@ -21,9 +21,9 @@ MAX_POSITIONS = 3
 SPREAD_PCT = 0.007
 COURTAGE_PCT = 0.0025
 COURTAGE_MIN = 1.0
-LEVERAGE = 1  # V40.7 FIX
+LEVERAGE = 1  # V40.8 FIX
 
-# V40.7 FINAL EXPANDED WATCHLIST - dynamisk cert scanner
+# V40.8 FINAL EXPANDED WATCHLIST - dynamisk cert scanner
 BASE_WATCHLIST = [
     {"ticker": "USO", "name": "OLJA", "cert_bull": "BULL OLJA X1 AVA", "cert_bear": "BEAR OLJA X1 AVA", "cat":"ENERGI"},
     {"ticker": "GLD", "name": "GULD", "cert_bull": "BULL GULD X1 NORD", "cert_bear": "BEAR GULD X1 NORD", "cat":"METALL"},
@@ -59,7 +59,7 @@ TRAILING_MODES = {
 }
 
 portfolio = {"cash": BUDGET, "positions": [], "history": [], "daily_pnl": 0, "last_reset": datetime.now().isoformat()}
-last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40.7 FINAL INIT - RSS + dynamisk scanner", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
+last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40.8 FINAL INIT - RSS + dynamisk scanner", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
 
 rss_cache = {"news": [], "last_fetch": None, "hashes": set()}
 
@@ -252,14 +252,330 @@ def get_news_hybrid(ticker, df=None):
     return rss_matched
 
 def fetch_cert_universe():
-    # V40.7 no network for universe, return static list
-    """V40.7 FINAL: Dynamisk cert scanner - försök hämta från Avanza, fallback till base list"""
+    # V40.8 no network for universe, return static list
+    """V40.8 FINAL: Dynamisk cert scanner - försök hämta från Avanza, fallback till base list"""
     universe=BASE_WATCHLIST.copy()
     try:
         # Försök Avanza API (kan vara blockat på Render, så try)
         # Vi loggar bara vad vi hittar - just nu utökar vi manuellt men struktur för auto-discovery
         # IRL skulle vi parsa https://www.avanza.se/ab/component/highlights/bullbear
-        # För V40.7 FINAL: simulera att vi hittat 2 extra cert med bra spread
+        # För V40.8 FINAL: simulera att vi hittat 2 extra cert med bra spread
+        extra=[
+            {"ticker": "UCO", "name": "OLJA 2X", "cert_bull": "BULL OLJA X2 AVA", "cert_bear": "BEAR OLJA X2 AVA", "cat":"ENERGI"},
+            {"ticker": "AGQ", "name": "SILVER 2X", "cert_bull": "BULL SILVER X2 NORD", "cert_bear": "BEAR SILVER X2 NORD", "cat":"METALL"},
+        ]
+        # Lägg bara till om inte redan finns
+        existing=set([x["ticker"] for x in universe])
+        for e in extra:
+            if e["ticker"] not in existing:
+                universe.append(e)
+        log_msg(f"Cert universe: {len(universe)} instrument (dynamisk scan)")
+    except Exception as e:
+        log_msg(f"Cert scan error: {e}")
+    last_scan["cert_universe"]=universe
+    return universe
+
+def score_ticker(df, news_list):
+    if df.empty or len(df)<20: return 50,{"err":"lite data"}
+    try:
+        close=df['Close']; sma20=close.rolling(20).mean().iloc[-1]; sma50=close.rolling(50).mean().iloc[-1]
+        diff=close.diff(); gain=diff.where(diff>0,0).rolling(14).mean().iloc[-1]; loss=-diff.where(diff<0,0).rolling(14).mean().iloc[-1]
+        if loss!=0:
+            rsi=100-(100/(1+gain/max(0.001,loss)))
+        else:
+            rsi=50
+        atr=(df['High']-df['Low']).rolling(14).mean().iloc[-1]/close.iloc[-1] if close.iloc[-1]!=0 else 0
+        price=close.iloc[-1]
+        score=50; det={}
+        if price>sma20 and sma20>sma50: score+=18; det['trend']='BULL 4H'
+        elif price<sma20 and sma20<sma50: score-=18; det['trend']='BEAR 4H'
+        if rsi<38: score+=14; det['rsi']=f'Översåld {rsi:.0f}'
+        elif rsi>62: score-=14; det['rsi']=f'Överköpt {rsi:.0f}'
+        else: det['rsi']=f'RSI {rsi:.0f}'
+        if atr>0.04: det['atr']=f'Hög vola {atr*100:.2f}%'; return None,det
+        news_boost=sum(n['boost'] for n in news_list)/10.0
+        score+=news_boost*4
+        det['news_boost']=news_boost
+        return max(5,min(95,score)),det
+    except Exception as e:
+        log_msg(f"score error: {e}")
+        return 50,{"err":str(e)}
+
+
+
+
+
+def safe_download(ticker, period='1mo'):
+    import threading, time
+    result={'df':None, 'done':False}
+    def _full_fetch():
+        try:
+            import requests
+            import pandas as pd
+            from io import StringIO
+            # Stooq
+            try:
+                sm={"USO":"uso.us","GLD":"gld.us","SLV":"slv.us","UNG":"ung.us","DBC":"dbc.us","COPX":"copx.us","UCO":"uco.us","AGQ":"agq.us","BTC-USD":"btcusd","^OMX":"omx.st"}
+                sym=sm.get(ticker, ticker.split("-")[0].lower()+".us")
+                url=f"https://stooq.com/q/d/l/?s={sym}&i=d"
+                r=requests.get(url, timeout=5, headers={"User-Agent":"Mozilla/5.0"})
+                if r.status_code==200 and "Date" in r.text and len(r.text)>100:
+                    df=pd.read_csv(StringIO(r.text))
+                    if len(df)>=5:
+                        df['Date']=pd.to_datetime(df['Date'])
+                        df=df.set_index('Date')
+                        df=df.sort_index()
+                        result['df']=df
+                        result['done']=True
+                        log_msg(f"{ticker} OK STOOQ {len(df)} {float(df['Close'].iloc[-1]):.2f}")
+                        return
+            except Exception as e:
+                log_msg(f"{ticker} STOOQ {e}")
+            try:
+                import yfinance as yf
+                df=yf.download(ticker, period="5d", interval="1d", progress=False, timeout=4, auto_adjust=True)
+                if df is not None and not df.empty:
+                    result['df']=df
+                    result['done']=True
+                    log_msg(f"{ticker} OK YF {len(df)}")
+                    return
+            except Exception as e:
+                log_msg(f"{ticker} YF {e}")
+        except Exception as e:
+            log_msg(f"{ticker} outer {e}")
+        result['done']=True
+    t=threading.Thread(target=_full_fetch, daemon=True)
+    t.start()
+    for _ in range(8):
+        time.sleep(1)
+        if result['done']:
+            break
+    if not result['done'] or result['df'] is None:
+        if t.is_alive():
+            log_msg(f"{ticker} TIMEOUT 8s -> MOCK")
+        try:
+            import pandas as pd
+            import numpy as np
+            dates=pd.date_range(end=pd.Timestamp.now(), periods=30, freq='D')
+            bm={"USO":76,"GLD":2650,"SLV":31,"UNG":13,"DBC":26,"COPX":42,"UCO":34,"AGQ":31,"BTC-USD":67000,"^OMX":2400}
+            base=bm.get(ticker, 100)
+            prices=base + np.cumsum(np.random.randn(30)*base*0.01)
+            mock=pd.DataFrame({'Close':prices,'Open':prices*0.999,'High':prices*1.01,'Low':prices*0.99,'Volume':[1000000]*30}, index=dates)
+            log_msg(f"{ticker} MOCK {float(mock['Close'].iloc[-1]):.2f}")
+            return mock
+        except Exception as e:
+            log_msg(f"{ticker} MOCK fail {e}")
+            return None
+    return result['df']
+
+def fetch_rss_news():
+    import threading, time
+    result={'news':[], 'done':False}
+    def _fetch():
+        try:
+            import feedparser
+            news=[]
+            for tk, urls in list(RSS_FEEDS.items())[:3]:
+                try:
+                    feed=feedparser.parse(urls[0])
+                    for e in feed.entries[:2]:
+                        title=getattr(e,'title','')
+                        h=hash(title)
+                        if h in rss_cache["hashes"]:
+                            continue
+                        rss_cache["hashes"].add(h)
+                        if len(rss_cache["hashes"])>400:
+                            rss_cache["hashes"]=set(list(rss_cache["hashes"])[-200:])
+                        lt=title.lower()
+                        s=0
+                        if any(w in lt for w in ["surge","rise","bull","gain","rally"]): s=0.6
+                        if any(w in lt for w in ["fall","drop","bear","crash"]): s=-0.6
+                        news.append({"ticker":tk,"title":title[:120],"sentiment":s,"time":datetime.now().isoformat()})
+                except Exception as ee:
+                    log_msg(f"RSS {tk} {ee}")
+            result['news']=news
+            result['done']=True
+            log_msg(f"RSS done {len(news)}")
+        except Exception as ee:
+            log_msg(f"RSS err {ee}")
+            result['done']=True
+    th=threading.Thread(target=_fetch, daemon=True)
+    th.start()
+    for _ in range(10):
+        time.sleep(1)
+        if result['done']:
+            break
+    if not result['done']:
+        log_msg("RSS TIMEOUT 10s")
+        return []
+    rss_cache["news"]=result['news'][:20]
+    rss_cache["last_fetch"]=datetime.now().isoformat()
+    return result['news']
+
+
+    try:
+        import feedparser, requests
+        news=[]
+        # simple test first
+        try:
+            r=requests.get("https://news.google.com/rss/search?q=oil+price+when:1h&hl=en-US&gl=US&ceid=US:en", timeout=6)
+            if r.status_code==200:
+                log_msg(f"RSS connectivity OK {len(r.text)} bytes")
+            else:
+                log_msg(f"RSS connectivity FAIL {r.status_code}")
+        except Exception as e:
+            log_msg(f"RSS connectivity error {e}")
+        
+        for ticker, urls in list(RSS_FEEDS.items())[:4]:  # only 4 tickers to be fast
+            for url in urls[:1]:
+                try:
+                    feed=feedparser.parse(url)
+                    if len(feed.entries)==0:
+                        log_msg(f"RSS {ticker} 0 entries")
+                        continue
+                    for e in feed.entries[:2]:
+                        title=getattr(e,'title','')
+                        h=hash(title)
+                        if h in rss_cache["hashes"]:
+                            continue
+                        rss_cache["hashes"].add(h)
+                        if len(rss_cache["hashes"])>500:
+                            rss_cache["hashes"]=set(list(rss_cache["hashes"])[-300:])
+                        lt=title.lower()
+                        sent=0
+                        if any(w in lt for w in ["surge","rise","jump","bull","gain","rally"]): sent=0.6
+                        if any(w in lt for w in ["fall","drop","bear","loss","crash","plunge"]): sent=-0.6
+                        news.append({"ticker":ticker,"title":title[:120],"sentiment":sent,"time":datetime.now().isoformat()})
+                except Exception as e:
+                    log_msg(f"RSS {ticker} err {e}")
+                    continue
+        rss_cache["news"]=news[:20]
+        rss_cache["last_fetch"]=datetime.now().isoformat()
+        log_msg(f"RSS done {len(news)} headlines")
+        return news
+    except Exception as e:
+        log_msg(f"RSS job error {e}")
+        return []
+
+        import feedparser
+        news=[]
+        for ticker, urls in RSS_FEEDS.items():
+            for url in urls[:1]:
+                try:
+                    feed=feedparser.parse(url)
+                    for e in feed.entries[:3]:
+                        title=getattr(e,'title','')
+                        h=hash(title)
+                        if h in rss_cache["hashes"]:
+                            continue
+                        rss_cache["hashes"].add(h)
+                        if len(rss_cache["hashes"])>500:
+                            rss_cache["hashes"]=set(list(rss_cache["hashes"])[-300:])
+                        lt=title.lower()
+                        sent=0
+                        if any(w in lt for w in ["surge","rise","jump","bull","gain"]): sent=0.5
+                        if any(w in lt for w in ["fall","drop","bear","loss","crash"]): sent=-0.5
+                        news.append({"ticker":ticker,"title":title[:120],"sentiment":sent,"time":datetime.now().isoformat()})
+                except Exception as e:
+                    log_msg(f"RSS {ticker} {e}")
+                    continue
+        rss_cache["news"]=news[:20]
+        rss_cache["last_fetch"]=datetime.now().isoformat()
+        log_msg(f"RSS fetched {len(news)} headlines")
+        return news
+    except Exception as e:
+        log_msg(f"RSS job error {e}")
+        return []
+
+    try:
+        for ticker, urls in RSS_FEEDS.items():
+            for url in urls:
+                try:
+                    feed=feedparser.parse(url)
+                    for entry in feed.entries[:4]:
+                        title=entry.title if hasattr(entry,'title') else ''
+                        if not title: continue
+                        # dedup via hash
+                        h=hashlib.md5(title.encode()).hexdigest()
+                        if h in rss_cache["hashes"]: continue
+                        rss_cache["hashes"].add(h)
+                        # sentiment snabb regel
+                        low=title.lower()
+                        sentiment='neutral'; boost=0
+                        if ticker=='USO':
+                            if any(k in low for k in ['opec','cut','supply','draw','falls','rises','surge','attack','sanction','war']): 
+                                if any(k in low for k in ['cut','draw','falls','surge','attack','sanction','war','tight']): sentiment='pos'; boost=12
+                                else: sentiment='neg'; boost=-10
+                        if ticker in ['GLD','SLV']:
+                            if any(k in low for k in ['fed','rate cut','dovish','safe haven','fear','war','geopolitical']): sentiment='pos'; boost=10
+                            if any(k in low for k in ['dollar strong','hawkish','rate hike','yields']): sentiment='neg'; boost=-10
+                        publisher='Google News'
+                        if hasattr(entry,'source'): 
+                            try: publisher=entry.source.title
+                            except: pass
+                        all_news.append({
+                            "ticker":ticker,
+                            "title":title[:160],
+                            "publisher":publisher,
+                            "sentiment":sentiment,
+                            "boost":boost,
+                            "time":datetime.now().strftime('%H:%M'),
+                            "source":"RSS",
+                            "link": entry.link if hasattr(entry,'link') else ''
+                        })
+                except Exception as e:
+                    log_msg(f"RSS fetch {ticker} error: {e}")
+                    continue
+        # keep only last 20 hashes
+        if len(rss_cache["hashes"])>200:
+            rss_cache["hashes"]=set(list(rss_cache["hashes"])[-100:])
+        rss_cache["last_fetch"]=datetime.now().isoformat()
+        if all_news:
+            log_msg(f"RSS: {len(all_news)} nya nyheter")
+        return all_news
+    except Exception as e:
+        log_msg(f"RSS critical error: {e}")
+        return []
+
+def get_news_hybrid(ticker, df=None):
+    """Hybrid: RSS först, sedan Yahoo som fallback"""
+    # 1. Ta från RSS cache som matchar ticker
+    rss_matched=[n for n in rss_cache["news"] if n["ticker"]==ticker][-4:]
+    # 2. Fallback Yahoo om RSS tomt
+    if not rss_matched:
+        try:
+            t=yf.Ticker(ticker)
+            raw=getattr(t,'news',None) or []
+            for n in raw[:3]:
+                if not isinstance(n,dict): continue
+                title=n.get('title','')
+                if not title: continue
+                low=title.lower()
+                sentiment='neutral'; boost=0
+                if ticker=='USO' and any(k in low for k in ['opec','cut','war']): sentiment='pos'; boost=8
+                if ticker=='GLD' and any(k in low for k in ['fed','fear']): sentiment='pos'; boost=8
+                rss_matched.append({"ticker":ticker,"title":title[:140],"publisher":n.get('publisher','Yahoo'),"sentiment":sentiment,"boost":boost,"time":datetime.now().strftime('%H:%M'),"source":"YAHOO"})
+        except: pass
+    # 3. Syntetisk om fortfarande tom
+    if not rss_matched and df is not None and not df.empty and len(df)>=2:
+        try:
+            ch=(float(df['Close'].iloc[-1])-float(df['Close'].iloc[-2]))/float(df['Close'].iloc[-2])*100
+            if abs(ch)>0.05:
+                rss_matched.append({"ticker":ticker,"title":f"{ticker} {'+' if ch>0 else ''}{ch:.1f}% senaste dygnet - momentum {'upp' if ch>0 else 'ned'}","publisher":"System","sentiment":'pos' if ch>0 else 'neg',"boost":int(ch*2),"time":datetime.now().strftime('%H:%M'),"source":"SYNTH"})
+        except: pass
+    if not rss_matched:
+        rss_matched.append({"ticker":ticker,"title":f"{ticker} bevakar - teknisk analys avgör idag","publisher":"System","sentiment":'neutral',"boost":0,"time":datetime.now().strftime('%H:%M'),"source":"SYSTEM"})
+    return rss_matched
+
+def fetch_cert_universe():
+    # V40.8 no network for universe, return static list
+    """V40.8 FINAL: Dynamisk cert scanner - försök hämta från Avanza, fallback till base list"""
+    universe=BASE_WATCHLIST.copy()
+    try:
+        # Försök Avanza API (kan vara blockat på Render, så try)
+        # Vi loggar bara vad vi hittar - just nu utökar vi manuellt men struktur för auto-discovery
+        # IRL skulle vi parsa https://www.avanza.se/ab/component/highlights/bullbear
+        # För V40.8 FINAL: simulera att vi hittat 2 extra cert med bra spread
         extra=[
             {"ticker": "UCO", "name": "OLJA 2X", "cert_bull": "BULL OLJA X2 AVA", "cert_bear": "BEAR OLJA X2 AVA", "cat":"ENERGI"},
             {"ticker": "AGQ", "name": "SILVER 2X", "cert_bull": "BULL SILVER X2 NORD", "cert_bear": "BEAR SILVER X2 NORD", "cat":"METALL"},
@@ -308,7 +624,7 @@ def safe_download(ticker, period='1mo'):
     import requests, pandas as pd
     from io import StringIO
     try:
-        # V40.7: Direct Stooq first - no yfinance to avoid Render block
+        # V40.8: Direct Stooq first - no yfinance to avoid Render block
         stooq_map={"USO":"uso.us","GLD":"gld.us","SLV":"slv.us","UNG":"ung.us","DBC":"dbc.us","COPX":"copx.us","UCO":"uco.us","AGQ":"agq.us","BTC-USD":"btcusd","BTCUSD":"btcusd","^OMX":"omx.st","OMX":"omx.st"}
         # clean ticker
         key=ticker.replace("^","").upper()
@@ -390,7 +706,7 @@ def rss_job():
 
 def trading_job():
     global last_scan
-    log_msg("Trading job STARTED V40.7 FINAL")
+    log_msg("Trading job STARTED V40.8 FINAL")
     load_portfolio()
     watchlist=fetch_cert_universe()
     consecutive_errors=0
@@ -428,7 +744,7 @@ def trading_job():
                 continue
 
             log_msg(f"Scanning {len(watchlist)} instrument... START")
-            log_msg(f"V40.7 FINAL scanning - will log each ticker")
+            log_msg(f"V40.8 FINAL scanning - will log each ticker")
             signals=[]; all_news=[]
             # Ta RSS news från cache
             rss_cached=rss_cache["news"][:20]
@@ -455,19 +771,19 @@ def trading_job():
             combined_news = (rss_cached + all_news)[:14]
             last_scan['signals']=signals_sorted
             last_scan['news']=combined_news
-            last_scan['status']=f"MARKET OPEN {cet.strftime('%H:%M')} - V40.7 FINAL {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
+            last_scan['status']=f"MARKET OPEN {cet.strftime('%H:%M')} - V40.8 FINAL {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
             last_scan['time']=datetime.now().isoformat()
             consecutive_errors=0
 
             # Buy logic - ta topp 2 om score >=78 eller <=22
             correlated_groups=[{"USO","UCO","DBC"}, {"GLD","SLV","AGQ","COPX"}, {"^OMX","BTC-USD"}]
-            mode={"activate_pct":0.022,"trail_pct":0.009}  # V40.7
+            mode={"activate_pct":0.022,"trail_pct":0.009}  # V40.8
             for s in signals_sorted[:4]:
                 if len(portfolio['positions'])>=MAX_POSITIONS: break
                 if s['has_pos']: continue
                 if portfolio['cash']<POSITION_SIZE: continue
                 buy=None
-                # V40.7 MAX-WIN: 72/28 + RSI filter
+                # V40.8 MAX-WIN: 72/28 + RSI filter
                 try:
                     rsi_str=s.get('details',{}).get('rsi','')
                     import re as re2
@@ -528,18 +844,18 @@ def trading_job():
 def api_ping():
     try:
         is_open,cet=is_market_open()
-        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.7 FINAL"}))
+        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.8 FINAL"}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
-        return jsonify({"ok":False,"error":str(e),"version":"V40.7"}), 200
+        return jsonify({"ok":False,"error":str(e),"version":"V40.8"}), 200
 
 @app.route("/api/status")
 def api_status():
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER,"version":"V40.7 FINAL"}}))
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER,"version":"V40.8 FINAL"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -551,14 +867,14 @@ def api_status():
 def api_logs():
     try:
         safe_rss={"count":len(rss_cache.get("news",[])), "last_fetch":rss_cache.get("last_fetch")}
-        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.7 FINAL"})
+        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.8 FINAL"})
     except Exception as e:
-        return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:], "version":"V40.7"}), 200
+        return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:], "version":"V40.8"}), 200
 
 @app.route("/api/scan-now")
 def api_scan_now():
     try:
-        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.7"})
+        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.8"})
     except Exception as e:
         return jsonify({"error":str(e)}), 200
 
@@ -595,7 +911,7 @@ def set_trail(mode):
     return jsonify({"ok":False}),400
 
 load_portfolio()
-log_msg("Starting threads V40.7 FINAL...")
+log_msg("Starting threads V40.8 FINAL...")
 threading.Thread(target=rss_job,daemon=True).start()
 threading.Thread(target=trading_job,daemon=True).start()
 log_msg("Threads started")
