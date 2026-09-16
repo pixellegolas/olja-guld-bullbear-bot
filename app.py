@@ -15,15 +15,15 @@ except:
 app = Flask(__name__, static_folder='static')
 DATA_FILE = "/tmp/portfolio_v3.json"
 BUDGET = float(os.getenv("DAILY_BUDGET_SEK", "10000"))
-POSITION_SIZE = 1500  # V40: larger size reduces fee friction 0.9% -> 0.32%
+POSITION_SIZE = 1500
 MAX_DAILY_LOSS = 250
 MAX_POSITIONS = 3
 SPREAD_PCT = 0.007
 COURTAGE_PCT = 0.0025
 COURTAGE_MIN = 1.0
-LEVERAGE = 1  # V40 FIX: X1 cert = 1x, not 5x
+LEVERAGE = 1  # V40.4 FIX
 
-# V36 EXPANDED WATCHLIST - dynamisk cert scanner
+# V40.4 FINAL EXPANDED WATCHLIST - dynamisk cert scanner
 BASE_WATCHLIST = [
     {"ticker": "USO", "name": "OLJA", "cert_bull": "BULL OLJA X1 AVA", "cert_bear": "BEAR OLJA X1 AVA", "cat":"ENERGI"},
     {"ticker": "GLD", "name": "GULD", "cert_bull": "BULL GULD X1 NORD", "cert_bear": "BEAR GULD X1 NORD", "cat":"METALL"},
@@ -53,15 +53,15 @@ RSS_FEEDS = {
 }
 
 TRAILING_MODES = {
-    "low": {"activate_pct": 0.03, "trail_pct": 0.015, "label": "Låg +3% → -1.5% V40"},
-    "medium": {"activate_pct": 0.022, "trail_pct": 0.009, "label": "Mellan +2.2% → -0.9% V40"},
-    "aggressive": {"activate_pct": 0.018, "trail_pct": 0.007, "label": "Aggressiv +1.8% → -0.7% V40"},
+    "low": {"activate_pct": 0.04, "trail_pct": 0.02, "label": "Låg +4% → -2.0%"},
+    "medium": {"activate_pct": 0.03, "trail_pct": 0.012, "label": "Mellan +3% → -1.2%"},
+    "aggressive": {"activate_pct": 0.02, "trail_pct": 0.008, "label": "Aggressiv +2% → -0.8%"},
 }
 
 portfolio = {"cash": BUDGET, "positions": [], "history": [], "daily_pnl": 0, "last_reset": datetime.now().isoformat()}
-last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40 MAX-WIN INIT - LEV 1x + 72/28 + corr guard", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
+last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40.4 FINAL INIT - RSS + dynamisk scanner", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
 
-rss_cache = {"news": [], "last_fetch": None, "hashes": set(), "hashes_list": []}  # hashes = set internal, never jsonified
+rss_cache = {"news": [], "last_fetch": None, "hashes": set()}
 
 def log_msg(msg):
     print(msg, flush=True)
@@ -95,7 +95,7 @@ def is_market_open():
     return open_t<=cet<=close_t, cet
 
 def fetch_rss_news():
-    """V36: Google News RSS var 2-3 min - mycket snabbare än Yahoo"""
+    """V40.4 FINAL: Google News RSS var 2-3 min - mycket snabbare än Yahoo"""
     all_news=[]
     if not HAS_FEEDPARSER:
         log_msg("feedparser saknas, kör fallback")
@@ -181,13 +181,13 @@ def get_news_hybrid(ticker, df=None):
     return rss_matched
 
 def fetch_cert_universe():
-    """V36: Dynamisk cert scanner - försök hämta från Avanza, fallback till base list"""
+    """V40.4 FINAL: Dynamisk cert scanner - försök hämta från Avanza, fallback till base list"""
     universe=BASE_WATCHLIST.copy()
     try:
         # Försök Avanza API (kan vara blockat på Render, så try)
         # Vi loggar bara vad vi hittar - just nu utökar vi manuellt men struktur för auto-discovery
         # IRL skulle vi parsa https://www.avanza.se/ab/component/highlights/bullbear
-        # För V36: simulera att vi hittat 2 extra cert med bra spread
+        # För V40.4 FINAL: simulera att vi hittat 2 extra cert med bra spread
         extra=[
             {"ticker": "UCO", "name": "OLJA 2X", "cert_bull": "BULL OLJA X2 AVA", "cert_bear": "BEAR OLJA X2 AVA", "cat":"ENERGI"},
             {"ticker": "AGQ", "name": "SILVER 2X", "cert_bull": "BULL SILVER X2 NORD", "cert_bear": "BEAR SILVER X2 NORD", "cat":"METALL"},
@@ -239,7 +239,7 @@ def safe_download(ticker, period='1mo'):
 
 def rss_job():
     """Kör var 2-3 min, oberoende av trading"""
-    log_msg("RSS job STARTED V40.3 FINAL - poll var 2 min")
+    log_msg("RSS job STARTED - poll var 2 min")
     while True:
         try:
             news=fetch_rss_news()
@@ -255,7 +255,7 @@ def rss_job():
 
 def trading_job():
     global last_scan
-    log_msg("Trading job STARTED V40.3 FINAL")
+    log_msg("Trading job STARTED V40.4 FINAL")
     load_portfolio()
     watchlist=fetch_cert_universe()
     consecutive_errors=0
@@ -301,13 +301,6 @@ def trading_job():
                 try:
                     df=safe_download(item['ticker'], period='1mo')
                     if df is None or df.empty: continue
-                    # V40 volume filter - require >80% of 20d avg
-                    try:
-                        vol=df['Volume'].iloc[-1]; vol_avg=df['Volume'].rolling(20).mean().iloc[-1]
-                        if vol_avg>0 and vol < vol_avg*0.8:
-                            log_msg(f"{item['ticker']} low volume skip {vol/vol_avg:.2f}")
-                            continue
-                    except: pass
                     # hybrid news
                     news_for_ticker=[n for n in rss_cached if n['ticker']==item['ticker']]
                     if not news_for_ticker:
@@ -326,51 +319,26 @@ def trading_job():
             combined_news = (rss_cached + all_news)[:14]
             last_scan['signals']=signals_sorted
             last_scan['news']=combined_news
-            last_scan['status']=f"V40 MAX-WIN MARKET OPEN {cet.strftime('%H:%M')} - V36 {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
+            last_scan['status']=f"MARKET OPEN {cet.strftime('%H:%M')} - V40.4 FINAL {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
             last_scan['time']=datetime.now().isoformat()
             consecutive_errors=0
 
-
-            # V40: EIA pause - no new buys Wed 16:00-17:00 CET (EIA 16:30)
-            if cet.weekday()==2 and 16 <= cet.hour < 17:
-                log_msg("EIA pause 16:00-17:00 - no new buys")
-                skip_buy=True
-            else:
-                skip_buy=False
-
-            # V40: Correlation guard
-            existing_underlyings=set([p['underlying'] for p in portfolio['positions']])
+            # Buy logic - ta topp 2 om score >=78 eller <=22
             correlated_groups=[{"USO","UCO","DBC"}, {"GLD","SLV","AGQ","COPX"}, {"^OMX","BTC-USD"}]
-
-            mode={"activate_pct":0.022,"trail_pct":0.009}  # V40 MAX-WIN
-            if skip_buy:
-                signals_sorted=[]
+            mode={"activate_pct":0.022,"trail_pct":0.009}  # V40.4
             for s in signals_sorted[:4]:
                 if len(portfolio['positions'])>=MAX_POSITIONS: break
                 if s['has_pos']: continue
-                # V40 correlation block
-                blocked=False
-                for group in correlated_groups:
-                    if s['ticker'] in group and any(u in group for u in existing_underlyings):
-                        # Allow if opposite direction? For now block same underlying family
-                        if any(p['underlying'] in group and p['direction']==('BULL' if s['score']>=50 else 'BEAR') for p in portfolio['positions']):
-                            blocked=True; break
-                if blocked:
-                    log_msg(f"{s['ticker']} blocked correlation")
-                    continue
                 if portfolio['cash']<POSITION_SIZE: continue
                 buy=None
-                # V40 MAX-WIN: 72/28 + double confirmation trend+RSI
-                details=s.get('details',{})
-                trend_ok = ('BULL' in details.get('trend','') and s['score']>50) or ('BEAR' in details.get('trend','') and s['score']<50) or True
-                rsi_str=details.get('rsi','')
-                rsi_val=50
+                # V40.4 MAX-WIN: 72/28 + RSI filter
                 try:
+                    rsi_str=s.get('details',{}).get('rsi','')
                     import re as re2
-                    m=re2.search(r'(\d+)',rsi_str)
-                    if m: rsi_val=int(m.group(1))
-                except: pass
-                # Double conf: if score high, RSI should not be overbought >70, and vice versa
+                    m=re2.search(r'(\d+)', rsi_str)
+                    rsi_val=int(m.group(1)) if m else 50
+                except:
+                    rsi_val=50
                 if s['score']>=72 and rsi_val<68: buy='BULL'
                 elif s['score']<=28 and rsi_val>32: buy='BEAR'
                 if not buy: continue
@@ -421,30 +389,21 @@ def trading_job():
 
 
 @app.route("/api/ping")
-def ping():
+def api_ping():
     try:
         is_open,cet=is_market_open()
-        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan['time'],"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.3 FINAL"}))
+        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.4 FINAL"}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
-        import traceback
-        print(f"/api/ping error: {e} {traceback.format_exc()}", flush=True)
-        return jsonify({"ok":False,"error":str(e),"version":"V40.3"}), 200
+        return jsonify({"ok":False,"error":str(e),"version":"V40.4"}), 200
 
 @app.route("/api/status")
-def status():
+def api_status():
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
-        # deep copy safe_scan without sets
-        import copy
-        safe_scan={}
-        for k,v in last_scan.items():
-            if k=="cert_universe":
-                safe_scan[k]=v
-            elif k in ["log","signals","news","time","status","market_open","cet_time"]:
-                safe_scan[k]=v
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER,"version":"V40.3 FINAL"}}))
+        safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER,"version":"V40.4 FINAL"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -453,35 +412,46 @@ def status():
         return jsonify({"error":str(e),"portfolio":portfolio,"last_scan":{"status":f"Error {e}","time":datetime.now().isoformat(),"signals":[],"news":[],"log":last_scan.get('log',[])[-10:]}}), 200
 
 @app.route("/api/logs")
-def logs():
+def api_logs():
     try:
         safe_rss={"count":len(rss_cache.get("news",[])), "last_fetch":rss_cache.get("last_fetch")}
-        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.3 FINAL"})
+        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.4 FINAL"})
     except Exception as e:
-        import traceback
-        print(f"/api/logs error: {e} {traceback.format_exc()}", flush=True)
-        return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:], "version":"V40.3"}), 200
+        return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:], "version":"V40.4"}), 200
 
 @app.route("/api/scan-now")
-def scan():
+def api_scan_now():
     try:
-        safe_rss={"count":len(rss_cache.get("news",[]))}
-        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:5], "rss":safe_rss, "version":"V40.3"})
+        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.4"})
     except Exception as e:
         return jsonify({"error":str(e)}), 200
+
+@app.route("/api/set-trailing/<mode>")
+def api_set_trailing(mode):
+    if mode in TRAILING_MODES:
+        os.environ["TRAILING_MODE"]=mode
+        return jsonify({"ok":True,"mode":TRAILING_MODES[mode]})
+    return jsonify({"ok":False}),400
+
 
 @app.route("/")
 def index():
     return send_from_directory('static','index.html')
 
-@app.route("/api/logs")
-def logs():
+def status():
     try:
-        return jsonify({"log":last_scan.get('log',[]), "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":rss_cache})
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":last_scan,"rss_cache":rss_cache,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER}}))
+        resp.headers['Cache-Control']='no-store'
+        return resp
+    except Exception as e:
+        import traceback
+        print(f"/api/status error: {e} {traceback.format_exc()}", flush=True)
+        return jsonify({"error":str(e),"portfolio":portfolio,"last_scan":last_scan}), 200
+
     except Exception as e:
         return jsonify({"error":str(e),"log":last_scan.get('log',[])}), 200
 
-@app.route("/api/set-trailing/<mode>")
+
 def set_trail(mode):
     if mode in TRAILING_MODES:
         os.environ["TRAILING_MODE"]=mode
@@ -489,7 +459,7 @@ def set_trail(mode):
     return jsonify({"ok":False}),400
 
 load_portfolio()
-log_msg("Starting threads V36...")
+log_msg("Starting threads V40.4 FINAL...")
 threading.Thread(target=rss_job,daemon=True).start()
 threading.Thread(target=trading_job,daemon=True).start()
 log_msg("Threads started")
