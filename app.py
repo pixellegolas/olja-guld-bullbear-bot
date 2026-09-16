@@ -4,7 +4,7 @@ from flask import Flask, jsonify, make_response, send_from_directory
 import pandas as pd
 import numpy as np
 
-print("V40.21 FINAL FIXED FINAL MOCK ONLY - GUARANTEED 10 SIGNALS", flush=True)
+print("V40.22 FINAL UI FINAL FIXED FINAL MOCK ONLY - GUARANTEED 10 SIGNALS", flush=True)
 
 app = Flask(__name__, static_folder='static')
 
@@ -13,7 +13,7 @@ POSITION_SIZE=1500
 TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009,"label":"Låg"},"mid":{"activate_pct":0.035,"trail_pct":0.014,"label":"Mellan"},"high":{"activate_pct":0.05,"trail_pct":0.02,"label":"Hög"}}
 
 portfolio={"cash":BUDGET,"positions":[],"history":[],"daily_pnl":0,"last_reset":datetime.now().isoformat()}
-last_scan={"time":datetime.now().isoformat(),"status":"V40.21 FINAL FIXED INIT - mock only guaranteed","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
+last_scan={"time":datetime.now().isoformat(),"status":"V40.22 FINAL UI FINAL FIXED INIT - mock only guaranteed","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
 rss_cache={"news":[],"last_fetch":None,"hashes":set()}
 
 def log_msg(msg):
@@ -176,7 +176,7 @@ def get_news_hybrid(ticker, df):
         return []
 
 def trading_job():
-    log_msg("Trading job STARTED V40.21 FINAL FIXED FINAL MOCK ONLY")
+    log_msg("Trading job STARTED V40.22 FINAL UI FINAL FIXED FINAL MOCK ONLY")
     watchlist=fetch_cert_universe()
     last_scan["cert_universe"]=watchlist
     log_msg(f"Cert universe: {len(watchlist)} instrument")
@@ -212,7 +212,7 @@ def trading_job():
             last_scan["signals"]=signals_sorted
             last_scan["news"]=rss_cache.get("news",[])[:10]
             last_scan["time"]=datetime.now().isoformat()
-            last_scan["status"]=f"V40.21 FINAL FIXED FINAL MOCK LIVE {datetime.now().strftime('%H:%M')} CET - {len(signals_sorted)} signaler, {len(rss_cache.get('news',[]))} nyheter"
+            last_scan["status"]=f"V40.22 FINAL UI FINAL FIXED FINAL MOCK LIVE {datetime.now().strftime('%H:%M')} CET - {len(signals_sorted)} signaler, {len(rss_cache.get('news',[]))} nyheter"
             log_msg(f"Scanning klart {len(signals_sorted)} signaler - STATUS UPDATED")
             time.sleep(30)
         except Exception as e:
@@ -220,13 +220,13 @@ def trading_job():
             try:
                 if len(last_scan.get("signals",[]))==0:
                     last_scan["signals"]=[{"ticker":"USO","name":"OLJA","price":76.12,"score":65,"details":{"rsi":"RSI 55","trend":"Trend +1.2%","price":76.12,"news_boost":0.6,"score":6.5},"news":[],"has_pos":False,"cat":"ENERGI"}]
-                    last_scan["status"]=f"V40.21 FINAL FIXED EMERGENCY {datetime.now().strftime('%H:%M')} - after crash"
+                    last_scan["status"]=f"V40.22 FINAL UI FINAL FIXED EMERGENCY {datetime.now().strftime('%H:%M')} - after crash"
             except:
                 pass
             time.sleep(5)
 
 def rss_job():
-    log_msg("RSS job STARTED V40.21 FINAL FIXED")
+    log_msg("RSS job STARTED V40.22 FINAL UI FINAL FIXED")
     while True:
         try:
             fetch_rss_news()
@@ -237,18 +237,18 @@ def rss_job():
 
 threading.Thread(target=trading_job, daemon=True).start()
 threading.Thread(target=rss_job, daemon=True).start()
-log_msg("Threads started V40.21 FINAL FIXED")
+log_msg("Threads started V40.22 FINAL UI FINAL FIXED")
 
 @app.route("/api/ping")
 def api_ping():
-    return jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"version":"V40.21 FINAL FIXED FINAL MOCK"})
+    return jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"version":"V40.22 FINAL UI FINAL FIXED FINAL MOCK"})
 
 @app.route("/api/status")
 def api_status():
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({"portfolio":{"cash":BUDGET,"positions":[],"history":[],"daily_pnl":0},"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"trailing_modes":TRAILING_MODES,"version":"V40.21 FINAL FIXED FINAL MOCK"}}))
+        resp=make_response(jsonify({"portfolio":{"cash":BUDGET,"positions":[],"history":[],"daily_pnl":0},"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"trailing_modes":TRAILING_MODES,"version":"V40.22 FINAL UI FINAL FIXED FINAL MOCK"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -257,7 +257,7 @@ def api_status():
 @app.route("/api/debug")
 def api_debug():
     try:
-        return jsonify({"last_scan":last_scan,"rss_cache":{"news":rss_cache.get("news",[]),"count":len(rss_cache.get("news",[]))},"version":"V40.21 FINAL FIXED"})
+        return jsonify({"last_scan":last_scan,"rss_cache":{"news":rss_cache.get("news",[]),"count":len(rss_cache.get("news",[]))},"version":"V40.22 FINAL UI FINAL FIXED"})
     except Exception as e:
         return jsonify({"error":str(e)}), 200
 
