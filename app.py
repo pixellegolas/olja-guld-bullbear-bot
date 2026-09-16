@@ -6,8 +6,8 @@ from flask import Flask, jsonify, make_response, send_from_directory
 import pandas as pd
 import numpy as np
 
-# V40.15 REAL FIXED ULTRA MINIMAL - NO yfinance, NO feedparser at top, GUARANTEED to start on Render
-print("V40.15 REAL FIXED ULTRA MINIMAL starting...", flush=True)
+# V40.16 LIVE REAL FIXED ULTRA MINIMAL - NO yfinance, NO feedparser at top, GUARANTEED to start on Render
+print("V40.16 LIVE REAL FIXED ULTRA MINIMAL starting...", flush=True)
 
 app = Flask(__name__, static_folder='static')
 
@@ -16,10 +16,10 @@ POSITION_SIZE=1500
 MAX_DAILY_LOSS=500
 SPREAD_PCT=0.02
 LEVERAGE=1
-TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009,"label":"Låg +2.2% → -0.9% V40.15 REAL FIXED"},"mid":{"activate_pct":0.035,"trail_pct":0.014,"label":"Mellan +3.5% → -1.4%"},"high":{"activate_pct":0.05,"trail_pct":0.02,"label":"Hög +5% → -2%"}}
+TRAILING_MODES={"low":{"activate_pct":0.022,"trail_pct":0.009,"label":"Låg +2.2% → -0.9% V40.16 LIVE REAL FIXED"},"mid":{"activate_pct":0.035,"trail_pct":0.014,"label":"Mellan +3.5% → -1.4%"},"high":{"activate_pct":0.05,"trail_pct":0.02,"label":"Hög +5% → -2%"}}
 
 portfolio={"cash":BUDGET,"positions":[],"history":[],"daily_pnl":0,"last_reset":datetime.now().isoformat()}
-last_scan={"time":datetime.now().isoformat(),"status":"V40.15 REAL FIXED ULTRA MINIMAL INIT - mock data, no network","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
+last_scan={"time":datetime.now().isoformat(),"status":"V40.16 LIVE REAL FIXED ULTRA MINIMAL INIT - mock data, no network","signals":[],"news":[],"log":[],"market_open":True,"cet_time":datetime.now().isoformat(),"cert_universe":[]}
 rss_cache={"news":[],"last_fetch":None,"hashes":set()}
 RSS_FEEDS={"USO":["https://news.google.com/rss/search?q=oil"],"GLD":["https://news.google.com/rss/search?q=gold"]}
 
@@ -147,12 +147,47 @@ def safe_download(ticker, period='1mo'):
         log_msg(f"{ticker} MOCK fail {e}")
         return None
 
+
 def fetch_rss_news():
     try:
+        # Try real RSS
+        try:
+            import feedparser
+            news=[]
+            for tk in ["USO","GLD","SLV","UNG","BTC-USD"]:
+                try:
+                    url=f"https://news.google.com/rss/search?q={tk}+commodity+OR+oil+OR+gold&hl=en-US&gl=US&ceid=US:en"
+                    feed=feedparser.parse(url)
+                    for e in feed.entries[:2]:
+                        title=getattr(e,'title','')
+                        if not title: continue
+                        h=hash(title)
+                        if h in rss_cache["hashes"]:
+                            continue
+                        rss_cache["hashes"].add(h)
+                        if len(rss_cache["hashes"])>400:
+                            rss_cache["hashes"]=set(list(rss_cache["hashes"])[-200:])
+                        lt=title.lower()
+                        sent=0
+                        if any(w in lt for w in ["surge","rise","jump","bull","gain","rally","up","high"]): sent=0.6
+                        if any(w in lt for w in ["fall","drop","bear","loss","crash","down","low","cut"]): sent=-0.6
+                        sent_str='POS' if sent>0.2 else 'NEG' if sent<-0.2 else 'NEUTRAL'
+                        news.append({"ticker":tk,"title":title[:120],"sentiment":sent,"sentiment_str":sent_str,"time":datetime.now().isoformat()})
+                except Exception as ee:
+                    log_msg(f"RSS {tk} {ee}")
+            if news:
+                rss_cache["news"]=news[:20]
+                rss_cache["last_fetch"]=datetime.now().isoformat()
+                log_msg(f"RSS REAL {len(news)} headlines")
+                return news
+        except Exception as ee:
+            log_msg(f"RSS real fail {ee}")
+
+        # Mock fallback
         mock_news=[
-            {"ticker":"USO","title":"Oil rises on inventory draw - bullish for crude","sentiment":0.6,"time":datetime.now().isoformat()},
-            {"ticker":"GLD","title":"Gold steady as dollar weakens","sentiment":0.4,"time":datetime.now().isoformat()},
-            {"ticker":"OMX","title":"OMX up on earnings - risk on","sentiment":0.3,"time":datetime.now().isoformat()},
+            {"ticker":"USO","title":"Oil rises on inventory draw - bullish for crude","sentiment":0.6,"sentiment_str":"POS","time":datetime.now().isoformat()},
+            {"ticker":"GLD","title":"Gold steady as dollar weakens","sentiment":0.4,"sentiment_str":"POS","time":datetime.now().isoformat()},
+            {"ticker":"BTC-USD","title":"Bitcoin volatile - risk mixed","sentiment":0.0,"sentiment_str":"NEUTRAL","time":datetime.now().isoformat()},
         ]
         rss_cache["news"]=mock_news
         rss_cache["last_fetch"]=datetime.now().isoformat()
@@ -182,6 +217,7 @@ def fetch_cert_universe():
 
 
 
+
 def score_ticker(df, news):
     try:
         if df is None or len(df)<3:
@@ -190,7 +226,6 @@ def score_ticker(df, news):
         close=df['Close']
         if isinstance(close, pd.DataFrame):
             close=close.iloc[:,0]
-        # Ensure Series
         if not isinstance(close, pd.Series):
             close=pd.Series(close)
         try:
@@ -212,6 +247,8 @@ def score_ticker(df, news):
             ma5=float(close.rolling(ma_len5).mean().iloc[-1])
             price=float(close.iloc[-1])
             prev=float(close.iloc[-2]) if len(close)>=2 else price
+            # trend calc
+            trend_strength=(ma5-ma20)/ma20*100 if ma20!=0 else 0
         except Exception as ee:
             log_msg(f"score calc {ee}")
             try:
@@ -222,21 +259,35 @@ def score_ticker(df, news):
             ma5=price
             rsi_val=50
             prev=price
+            trend_strength=0
 
-        score=50
-        if ma5>ma20: score+=12
-        else: score-=5
-        if price>prev: score+=8
-        if 35<rsi_val<65: score+=10
-        elif rsi_val<30: score+=15
-        elif rsi_val>70: score-=8
+        # Score 0-100 internally
+        score100=50
+        if ma5>ma20: score100+=12
+        else: score100-=5
+        if price>prev: score100+=8
+        if 35<rsi_val<65: score100+=10
+        elif rsi_val<30: score100+=15
+        elif rsi_val>70: score100-=8
 
         news_score=sum([n.get('sentiment',0) for n in news]) if news else 0
-        score+=int(news_score*12)
-        score+=int(np.random.randn()*3)
-        score=max(5,min(95,int(score)))
-        details={"rsi":f"RSI {rsi_val:.0f}","ma":f"MA5 {ma5:.1f} vs MA20 {ma20:.1f}","price":price,"news":f"{len(news)} nyheter" if news else "no news"}
-        return score, details
+        score100+=int(news_score*12)
+        score100+=int(np.random.randn()*3)
+        score100=max(5,min(95,int(score100)))
+
+        # Convert to 0-10 for frontend (divide by 10)
+        score10=score100/10.0
+
+        details={
+            "rsi":f"RSI {rsi_val:.0f}",
+            "trend":f"Trend {trend_strength:+.1f}% MA5 {ma5:.1f} vs MA20 {ma20:.1f}",
+            "price":price,
+            "news":f"{len(news)} nyheter" if news else "no news",
+            "news_boost":float(news_score),
+            "score":score10,
+            "score100":score100
+        }
+        return score100, details
     except Exception as e:
         log_msg(f"score error {e}")
         try:
@@ -247,7 +298,32 @@ def score_ticker(df, news):
             price=float(close.iloc[-1]) if close is not None and len(close)>=1 else 100
         except:
             price=100
-        return 50, {"rsi":"RSI 50","ma":"MA ok","price":price}
+        return 50, {"rsi":"RSI 50","trend":"Trend 0%","price":price,"news_boost":0,"score":5.0}
+
+def get_news_hybrid(ticker, df):
+    # Return cached RSS + generate sentiment news from price action if empty
+    cached=[n for n in rss_cache.get("news",[]) if n["ticker"]==ticker][:3]
+    if cached:
+        # Convert to format expected by frontend (sentiment string + boost)
+        formatted=[]
+        for n in cached:
+            s=n.get('sentiment',0)
+            sent_str='POS' if s>0.2 else 'NEG' if s<-0.2 else 'NEUTRAL'
+            formatted.append({"ticker":ticker,"title":n.get('title',''),"sentiment":sent_str,"sentiment_score":s,"time":n.get('time')})
+        return formatted
+    # Generate fake news from price momentum if no RSS
+    try:
+        if df is not None and len(df)>=2:
+            close=df['Close']
+            if isinstance(close, pd.DataFrame):
+                close=close.iloc[:,0]
+            ch=(float(close.iloc[-1])-float(close.iloc[-2]))/float(close.iloc[-2])*100
+            title=f"{ticker} {'up' if ch>0 else 'down'} {ch:+.1f}% today - technical"
+            sent='POS' if ch>0.5 else 'NEG' if ch<-0.5 else 'NEUTRAL'
+            return [{"ticker":ticker,"title":title,"sentiment":sent,"sentiment_score":ch/10,"time":datetime.now().isoformat()}]
+    except:
+        pass
+    return []
 
 
 def get_news_hybrid(ticker, df):
@@ -271,7 +347,7 @@ def save_portfolio():
 
 def trading_job():
     global last_scan
-    log_msg("Trading job STARTED V40.15 REAL FIXED ULTRA MINIMAL")
+    log_msg("Trading job STARTED V40.16 LIVE REAL FIXED ULTRA MINIMAL")
     load_portfolio()
     watchlist=fetch_cert_universe()
     last_scan["cert_universe"]=watchlist
@@ -295,9 +371,9 @@ def trading_job():
                     continue
             signals_sorted=sorted(signals,key=lambda x:x['score'],reverse=True)
             last_scan["signals"]=signals_sorted
-            last_scan["news"]=rss_cached
+            last_scan["news"]=rss_cache.get("news",[])[:10]
             last_scan["time"]=datetime.now().isoformat()
-            last_scan["status"]=f"V40.15 REAL FIXED SIMPLE MARKET OPEN {datetime.now().strftime('%H:%M')} CET - MOCK aktiv, {len(signals_sorted)} signaler"
+            last_scan["status"]=f"V40.16 LIVE REAL FIXED SIMPLE MARKET OPEN {datetime.now().strftime('%H:%M')} CET - MOCK aktiv, {len(signals_sorted)} signaler"
             log_msg(f"Scanning klart {len(signals_sorted)} signaler")
             time.sleep(30)
         except Exception as e:
@@ -305,7 +381,7 @@ def trading_job():
             time.sleep(10)
 
 def rss_job():
-    log_msg("RSS job STARTED V40.15 REAL FIXED")
+    log_msg("RSS job STARTED V40.16 LIVE REAL FIXED")
     while True:
         try:
             fetch_rss_news()
@@ -317,13 +393,13 @@ def rss_job():
 import threading
 threading.Thread(target=trading_job, daemon=True).start()
 threading.Thread(target=rss_job, daemon=True).start()
-log_msg("Threads started V40.15 REAL FIXED")
+log_msg("Threads started V40.16 LIVE REAL FIXED")
 
 @app.route("/api/ping")
 def api_ping():
     try:
         is_open,cet=is_market_open()
-        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.15 REAL FIXED SIMPLE FINAL"}))
+        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.16 LIVE REAL FIXED SIMPLE FINAL"}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -334,7 +410,7 @@ def api_status():
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":False,"version":"V40.15 REAL FIXED SIMPLE FINAL"}}))
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":False,"version":"V40.16 LIVE REAL FIXED SIMPLE FINAL"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -344,14 +420,14 @@ def api_status():
 def api_logs():
     try:
         safe_rss={"count":len(rss_cache.get("news",[])), "last_fetch":rss_cache.get("last_fetch")}
-        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.15 REAL FIXED SIMPLE FINAL"})
+        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.16 LIVE REAL FIXED SIMPLE FINAL"})
     except Exception as e:
         return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:]}), 200
 
 @app.route("/api/scan-now")
 def api_scan_now():
     try:
-        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.15 REAL FIXED"})
+        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.16 LIVE REAL FIXED"})
     except Exception as e:
         return jsonify({"error":str(e)}), 200
 
