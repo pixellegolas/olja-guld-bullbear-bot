@@ -61,7 +61,7 @@ TRAILING_MODES = {
 portfolio = {"cash": BUDGET, "positions": [], "history": [], "daily_pnl": 0, "last_reset": datetime.now().isoformat()}
 last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40 MAX-WIN INIT - LEV 1x + 72/28 + corr guard", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
 
-rss_cache = {"news": [], "last_fetch": None, "hashes": set()}
+rss_cache = {"news": [], "last_fetch": None, "hashes": set(), "hashes_list": []}  # hashes = set internal, never jsonified
 
 def log_msg(msg):
     print(msg, flush=True)
@@ -239,7 +239,7 @@ def safe_download(ticker, period='1mo'):
 
 def rss_job():
     """Kör var 2-3 min, oberoende av trading"""
-    log_msg("RSS job STARTED - poll var 2 min")
+    log_msg("RSS job STARTED V40.3 FINAL - poll var 2 min")
     while True:
         try:
             news=fetch_rss_news()
@@ -255,7 +255,7 @@ def rss_job():
 
 def trading_job():
     global last_scan
-    log_msg("Trading job STARTED V36")
+    log_msg("Trading job STARTED V40.3 FINAL")
     load_portfolio()
     watchlist=fetch_cert_universe()
     consecutive_errors=0
@@ -419,30 +419,60 @@ def trading_job():
             continue
         time.sleep(60)
 
-@app.route("/")
-def index():
-    return send_from_directory('static','index.html')
 
 @app.route("/api/ping")
 def ping():
     try:
         is_open,cet=is_market_open()
-        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan['time'],"rss":len(rss_cache["news"]),"universe":len(last_scan.get('cert_universe',[])),"log":last_scan.get('log',[])[-3:]}))
+        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan['time'],"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.3 FINAL"}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
-        return jsonify({"ok":False,"error":str(e)}), 200
+        import traceback
+        print(f"/api/ping error: {e} {traceback.format_exc()}", flush=True)
+        return jsonify({"ok":False,"error":str(e),"version":"V40.3"}), 200
 
 @app.route("/api/status")
 def status():
     try:
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":last_scan,"rss_cache":rss_cache,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER}}))
+        safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
+        # deep copy safe_scan without sets
+        import copy
+        safe_scan={}
+        for k,v in last_scan.items():
+            if k=="cert_universe":
+                safe_scan[k]=v
+            elif k in ["log","signals","news","time","status","market_open","cet_time"]:
+                safe_scan[k]=v
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER,"version":"V40.3 FINAL"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
         import traceback
         print(f"/api/status error: {e} {traceback.format_exc()}", flush=True)
-        return jsonify({"error":str(e),"portfolio":portfolio,"last_scan":last_scan}), 200
+        return jsonify({"error":str(e),"portfolio":portfolio,"last_scan":{"status":f"Error {e}","time":datetime.now().isoformat(),"signals":[],"news":[],"log":last_scan.get('log',[])[-10:]}}), 200
+
+@app.route("/api/logs")
+def logs():
+    try:
+        safe_rss={"count":len(rss_cache.get("news",[])), "last_fetch":rss_cache.get("last_fetch")}
+        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.3 FINAL"})
+    except Exception as e:
+        import traceback
+        print(f"/api/logs error: {e} {traceback.format_exc()}", flush=True)
+        return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:], "version":"V40.3"}), 200
+
+@app.route("/api/scan-now")
+def scan():
+    try:
+        safe_rss={"count":len(rss_cache.get("news",[]))}
+        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:5], "rss":safe_rss, "version":"V40.3"})
+    except Exception as e:
+        return jsonify({"error":str(e)}), 200
+
+@app.route("/")
+def index():
+    return send_from_directory('static','index.html')
 
 @app.route("/api/logs")
 def logs():
@@ -450,10 +480,6 @@ def logs():
         return jsonify({"log":last_scan.get('log',[]), "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":rss_cache})
     except Exception as e:
         return jsonify({"error":str(e),"log":last_scan.get('log',[])}), 200
-
-@app.route("/api/scan-now")
-def scan():
-    return jsonify(last_scan)
 
 @app.route("/api/set-trailing/<mode>")
 def set_trail(mode):
