@@ -2,5 +2,4 @@ flask
 pandas
 requests
 gunicorn
-feedparser
-lxml
+numpy

@@ -2,7 +2,6 @@
 import os, json, time, threading, traceback, hashlib
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, send_from_directory, make_response
-import yfinance as yf
 import requests
 
 # feedparser optional - fallback if not installed
@@ -21,9 +20,9 @@ MAX_POSITIONS = 3
 SPREAD_PCT = 0.007
 COURTAGE_PCT = 0.0025
 COURTAGE_MIN = 1.0
-LEVERAGE = 1  # V40.9 FIX
+LEVERAGE = 1  # V40.10 FIX
 
-# V40.9 FINAL MOCK EXPANDED WATCHLIST - dynamisk cert scanner
+# V40.10 SIMPLE FINAL EXPANDED WATCHLIST - dynamisk cert scanner
 BASE_WATCHLIST = [
     {"ticker": "USO", "name": "OLJA", "cert_bull": "BULL OLJA X1 AVA", "cert_bear": "BEAR OLJA X1 AVA", "cat":"ENERGI"},
     {"ticker": "GLD", "name": "GULD", "cert_bull": "BULL GULD X1 NORD", "cert_bear": "BEAR GULD X1 NORD", "cat":"METALL"},
@@ -59,7 +58,7 @@ TRAILING_MODES = {
 }
 
 portfolio = {"cash": BUDGET, "positions": [], "history": [], "daily_pnl": 0, "last_reset": datetime.now().isoformat()}
-last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40.9 FINAL MOCK INIT - RSS + dynamisk scanner", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
+last_scan = {"time": datetime.now().isoformat(), "signals": [], "news": [], "status": "V40.10 SIMPLE FINAL INIT - RSS + dynamisk scanner", "market_open": False, "cet_time": datetime.now().isoformat(), "log": [], "cert_universe": []}
 
 rss_cache = {"news": [], "last_fetch": None, "hashes": set()}
 
@@ -175,13 +174,13 @@ def get_news_hybrid(ticker, df=None):
     return rss_matched
 
 def fetch_cert_universe():
-    """V40.9 FINAL MOCK: Dynamisk cert scanner - försök hämta från Avanza, fallback till base list"""
+    """V40.10 SIMPLE FINAL: Dynamisk cert scanner - försök hämta från Avanza, fallback till base list"""
     universe=BASE_WATCHLIST.copy()
     try:
         # Försök Avanza API (kan vara blockat på Render, så try)
         # Vi loggar bara vad vi hittar - just nu utökar vi manuellt men struktur för auto-discovery
         # IRL skulle vi parsa https://www.avanza.se/ab/component/highlights/bullbear
-        # För V40.9 FINAL MOCK: simulera att vi hittat 2 extra cert med bra spread
+        # För V40.10 SIMPLE FINAL: simulera att vi hittat 2 extra cert med bra spread
         extra=[
             {"ticker": "UCO", "name": "OLJA 2X", "cert_bull": "BULL OLJA X2 AVA", "cert_bear": "BEAR OLJA X2 AVA", "cat":"ENERGI"},
             {"ticker": "AGQ", "name": "SILVER 2X", "cert_bull": "BULL SILVER X2 NORD", "cert_bear": "BEAR SILVER X2 NORD", "cat":"METALL"},
@@ -245,17 +244,17 @@ def safe_download(ticker, period='1mo'):
     try:
         import pandas as pd
         import numpy as np
-        bm={"USO":76.12,"GLD":2654.50,"SLV":31.20,"UNG":13.10,"DBC":26.40,"COPX":42.30,"UCO":34.50,"AGQ":31.80,"BTC-USD":67420,"BTCUSD":67420,"^OMX":2412,"OMX":2412}
-        base=bm.get(ticker, 100)
+        bm={"USO":76.12,"GLD":2654.50,"SLV":31.20,"UNG":13.10,"DBC":26.40,"COPX":42.30,"UCO":34.50,"AGQ":31.80,"BTC-USD":67420,"BTCUSD":67420,"^OMX":2412,"OMX":2412,"BTC":67420}
+        base_price=bm.get(ticker, bm.get(ticker.upper(), 100))
         dates=pd.date_range(end=pd.Timestamp.now(), periods=30, freq='D')
         prices=[]
-        p=base
+        p=base_price
         for i in range(30):
-            p+=np.random.randn()*base*0.008
+            p+=float(np.random.randn()*base_price*0.008)
             prices.append(p)
-        mock=pd.DataFrame({'Close':prices,'Open':[x*0.999 for x in prices],'High':[x*1.01 for x in prices],'Low':[x*0.99 for x in prices],'Volume':[1200000]*30}, index=dates)
-        log_msg(f"{ticker} INSTANT MOCK {float(mock['Close'].iloc[-1]):.2f}")
-        return mock
+        df=pd.DataFrame({'Close':prices,'Open':[x*0.999 for x in prices],'High':[x*1.01 for x in prices],'Low':[x*0.99 for x in prices],'Volume':[1200000]*30}, index=dates)
+        log_msg(f"{ticker} MOCK {float(df['Close'].iloc[-1]):.2f}")
+        return df
     except Exception as e:
         log_msg(f"{ticker} MOCK fail {e}")
         return None
@@ -265,7 +264,7 @@ def fetch_rss_news():
         mock_news=[
             {"ticker":"USO","title":"Oil rises on inventory draw - bullish for crude","sentiment":0.6,"time":datetime.now().isoformat()},
             {"ticker":"GLD","title":"Gold steady as dollar weakens","sentiment":0.4,"time":datetime.now().isoformat()},
-            {"ticker":"BTC-USD","title":"Bitcoin volatile - risk mixed","sentiment":0.0,"time":datetime.now().isoformat()},
+            {"ticker":"OMX","title":"OMX up on earnings - risk on","sentiment":0.3,"time":datetime.now().isoformat()},
         ]
         rss_cache["news"]=mock_news
         rss_cache["last_fetch"]=datetime.now().isoformat()
@@ -275,10 +274,25 @@ def fetch_rss_news():
         log_msg(f"RSS mock fail {e}")
         return []
 
+def fetch_cert_universe():
+    # V40.10 static universe - no network
+    return [
+        {"cat":"ENERGI","cert_bear":"BEAR OLJA X1 AVA","cert_bull":"BULL OLJA X1 AVA","name":"OLJA","ticker":"USO"},
+        {"cat":"METALL","cert_bear":"BEAR GULD X1 NORD","cert_bull":"BULL GULD X1 NORD","name":"GULD","ticker":"GLD"},
+        {"cat":"METALL","cert_bear":"BEAR SILVER X1 AVA","cert_bull":"BULL SILVER X1 AVA","name":"SILVER","ticker":"SLV"},
+        {"cat":"ENERGI","cert_bear":"BEAR NATGAS X1 AVA","cert_bull":"BULL NATGAS X1 AVA","name":"NATGAS","ticker":"UNG"},
+        {"cat":"INDEX","cert_bear":"BEAR RÅVARA X1","cert_bull":"BULL RÅVARA X1","name":"RÅVARA","ticker":"DBC"},
+        {"cat":"METALL","cert_bear":"BEAR KOPPAR X1","cert_bull":"BULL KOPPAR X1","name":"KOPPAR","ticker":"COPX"},
+        {"cat":"INDEX","cert_bear":"BEAR OMX X1","cert_bull":"BULL OMX X1","name":"OMX","ticker":"^OMX"},
+        {"cat":"CRYPTO","cert_bear":"BEAR BTC X1","cert_bull":"BULL BTC X1","name":"BITCOIN","ticker":"BTC-USD"},
+        {"cat":"ENERGI","cert_bear":"BEAR OLJA X2 AVA","cert_bull":"BULL OLJA X2 AVA","name":"OLJA 2X","ticker":"UCO"},
+        {"cat":"METALL","cert_bear":"BEAR SILVER X2 NORD","cert_bull":"BULL SILVER X2 NORD","name":"SILVER 2X","ticker":"AGQ"},
+    ]
+
 
 def trading_job():
     global last_scan
-    log_msg("Trading job STARTED V40.9 FINAL MOCK")
+    log_msg("Trading job STARTED V40.10 SIMPLE FINAL")
     load_portfolio()
     watchlist=fetch_cert_universe()
     consecutive_errors=0
@@ -342,19 +356,19 @@ def trading_job():
             combined_news = (rss_cached + all_news)[:14]
             last_scan['signals']=signals_sorted
             last_scan['news']=combined_news
-            last_scan['status']=f"MARKET OPEN {cet.strftime('%H:%M')} - V40.9 FINAL MOCK {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
+            last_scan['status']=f"MARKET OPEN {cet.strftime('%H:%M')} - V40.10 SIMPLE FINAL {len(signals_sorted)} signaler från {len(watchlist)} cert • RSS {len(rss_cached)} nyheter"
             last_scan['time']=datetime.now().isoformat()
             consecutive_errors=0
 
             # Buy logic - ta topp 2 om score >=78 eller <=22
             correlated_groups=[{"USO","UCO","DBC"}, {"GLD","SLV","AGQ","COPX"}, {"^OMX","BTC-USD"}]
-            mode={"activate_pct":0.022,"trail_pct":0.009}  # V40.9
+            mode={"activate_pct":0.022,"trail_pct":0.009}  # V40.10
             for s in signals_sorted[:4]:
                 if len(portfolio['positions'])>=MAX_POSITIONS: break
                 if s['has_pos']: continue
                 if portfolio['cash']<POSITION_SIZE: continue
                 buy=None
-                # V40.9 MAX-WIN: 72/28 + RSI filter
+                # V40.10 MAX-WIN: 72/28 + RSI filter
                 try:
                     rsi_str=s.get('details',{}).get('rsi','')
                     import re as re2
@@ -415,18 +429,18 @@ def trading_job():
 def api_ping():
     try:
         is_open,cet=is_market_open()
-        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.9 FINAL MOCK"}))
+        resp=make_response(jsonify({"ok":True,"time":datetime.utcnow().isoformat(),"cet":cet.isoformat(),"market_open":is_open,"last_scan":last_scan.get('time'),"rss_count":len(rss_cache.get("news",[])),"universe":len(last_scan.get('cert_universe',[])),"version":"V40.10 SIMPLE FINAL"}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
-        return jsonify({"ok":False,"error":str(e),"version":"V40.9"}), 200
+        return jsonify({"ok":False,"error":str(e),"version":"V40.10"}), 200
 
 @app.route("/api/status")
 def api_status():
     try:
         safe_rss={"news":rss_cache.get("news",[])[:14], "last_fetch":rss_cache.get("last_fetch"), "count":len(rss_cache.get("news",[]))}
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","market_open","cet_time","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER,"version":"V40.9 FINAL MOCK"}}))
+        resp=make_response(jsonify({"portfolio":portfolio,"last_scan":safe_scan,"rss_cache":safe_rss,"config":{"budget":BUDGET,"position":POSITION_SIZE,"max_daily":MAX_DAILY_LOSS,"spread":SPREAD_PCT,"trailing_modes":TRAILING_MODES,"hours":"08:55-17:30 CET","has_feedparser":HAS_FEEDPARSER,"version":"V40.10 SIMPLE FINAL"}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -438,14 +452,14 @@ def api_status():
 def api_logs():
     try:
         safe_rss={"count":len(rss_cache.get("news",[])), "last_fetch":rss_cache.get("last_fetch")}
-        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.9 FINAL MOCK"})
+        return jsonify({"log":last_scan.get('log',[])[-30:], "status":last_scan.get('status'), "time":last_scan.get('time'), "rss":safe_rss, "version":"V40.10 SIMPLE FINAL"})
     except Exception as e:
-        return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:], "version":"V40.9"}), 200
+        return jsonify({"error":str(e),"log":last_scan.get('log',[])[-20:], "version":"V40.10"}), 200
 
 @app.route("/api/scan-now")
 def api_scan_now():
     try:
-        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.9"})
+        return jsonify({"time":last_scan.get('time'), "status":last_scan.get('status'), "signals":last_scan.get('signals',[])[:8], "news":last_scan.get('news',[])[:6], "version":"V40.10"})
     except Exception as e:
         return jsonify({"error":str(e)}), 200
 
@@ -482,7 +496,7 @@ def set_trail(mode):
     return jsonify({"ok":False}),400
 
 load_portfolio()
-log_msg("Starting threads V40.9 FINAL MOCK...")
+log_msg("Starting threads V40.10 SIMPLE FINAL...")
 threading.Thread(target=rss_job,daemon=True).start()
 threading.Thread(target=trading_job,daemon=True).start()
 log_msg("Threads started")
