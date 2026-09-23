@@ -1,65 +1,62 @@
-import os, time, json, threading, traceback, random, re
+
+import os, time, json, threading, traceback, random
 from datetime import datetime
 from flask import Flask, jsonify, make_response, send_from_directory, request
 import numpy as np
 import requests
 
-print("V41 NEWS INTEL - NO TRADE + TELEGRAM", flush=True)
+print("V42 MORNING BRIEF - NO SPAM", flush=True)
 
 app = Flask(__name__, static_folder='static')
 
-# CONFIG - NO TRADE
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 SCORE_THRESHOLD = float(os.environ.get("SCORE_THRESHOLD", "7.5"))
+MORNING_HOUR_START = int(os.environ.get("MORNING_HOUR_START", "8"))
+MORNING_HOUR_END = int(os.environ.get("MORNING_HOUR_END", "9"))
+MORNING_ONLY = os.environ.get("MORNING_ONLY", "true").lower()=="true"
+TRADING_ENABLED = os.environ.get("TRADING_ENABLED", "false").lower()=="true"
 
-# EXPANDED UNIVERSE - 25 tickers: SAAB, Nvidia, guld, olja, etc
 CERT_UNIVERSE = [
-    # Energi
     {"cat":"ENERGI","name":"OLJA","ticker":"USO","yahoo":"USO","display":"OLJA (USO)"},
     {"cat":"ENERGI","name":"OLJA 2X","ticker":"UCO","yahoo":"UCO","display":"OLJA 2X"},
     {"cat":"ENERGI","name":"NATGAS","ticker":"UNG","yahoo":"UNG","display":"NATGAS"},
-    # Metall / Guld
     {"cat":"METALL","name":"GULD","ticker":"GLD","yahoo":"GLD","display":"GULD"},
     {"cat":"METALL","name":"GULD 2X","ticker":"UGL","yahoo":"UGL","display":"GULD 2X"},
     {"cat":"METALL","name":"SILVER","ticker":"SLV","yahoo":"SLV","display":"SILVER"},
     {"cat":"METALL","name":"SILVER 2X","ticker":"AGQ","yahoo":"AGQ","display":"SILVER 2X"},
     {"cat":"METALL","name":"KOPPAR","ticker":"COPX","yahoo":"COPX","display":"KOPPAR"},
     {"cat":"INDEX","name":"RÅVARA","ticker":"DBC","yahoo":"DBC","display":"RÅVARA INDEX"},
-    # Crypto
     {"cat":"CRYPTO","name":"BITCOIN","ticker":"BTC-USD","yahoo":"BTC-USD","display":"BITCOIN"},
-    # US Tech - Nvidia etc
     {"cat":"US TECH","name":"NVIDIA","ticker":"NVDA","yahoo":"NVDA","display":"NVIDIA"},
     {"cat":"US TECH","name":"TESLA","ticker":"TSLA","yahoo":"TSLA","display":"TESLA"},
     {"cat":"US TECH","name":"APPLE","ticker":"AAPL","yahoo":"AAPL","display":"APPLE"},
-    # SE - SAAB + Swedish
     {"cat":"SE DEFENCE","name":"SAAB","ticker":"SAAB-B.ST","yahoo":"SAAB-B.ST","display":"SAAB B"},
     {"cat":"SE","name":"VOLVO","ticker":"VOLV-B.ST","yahoo":"VOLV-B.ST","display":"VOLVO B"},
     {"cat":"SE","name":"EVOLUTION","ticker":"EVO.ST","yahoo":"EVO.ST","display":"EVOLUTION"},
     {"cat":"SE","name":"ERICSSON","ticker":"ERIC-B.ST","yahoo":"ERIC-B.ST","display":"ERICSSON B"},
     {"cat":"SE","name":"NIBE","ticker":"NIBE-B.ST","yahoo":"NIBE-B.ST","display":"NIBE B"},
     {"cat":"SE","name":"ABB","ticker":"ABB.ST","yahoo":"ABB.ST","display":"ABB"},
-    # Index
     {"cat":"INDEX","name":"OMX","ticker":"^OMX","yahoo":"^OMX","display":"OMX Stockholm 30"},
-    {"cat":"INDEX","name":"S&P500","ticker":"^GSPC","yahoo":"^GSPC","display":"S&P 500"},
+    {"cat":"INDEX","name":"S&P500","ticker":"^GSPC","yahoo":"^GSPC","display":"S&P500"},
     {"cat":"INDEX","name":"NASDAQ","ticker":"^IXIC","yahoo":"^IXIC","display":"NASDAQ"},
-    # Extra
     {"cat":"ENERGI","name":"URAN","ticker":"URA","yahoo":"URA","display":"URAN ETF"},
     {"cat":"DEFENCE","name":"LOCKHEED","ticker":"LMT","yahoo":"LMT","display":"LOCKHEED MARTIN"},
     {"cat":"CHIP","name":"AMD","ticker":"AMD","yahoo":"AMD","display":"AMD"},
 ]
 
-last_scan={"time":datetime.now().isoformat(),"status":"V41 INIT NEWS ONLY","signals":[],"news":[],"log":["V41 INIT - news only, no trade"],"cert_universe":CERT_UNIVERSE}
+last_scan={"time":datetime.now().isoformat(),"status":"V42 INIT MORNING BRIEF","signals":[],"news":[],"log":["V42 INIT MORNING - only 08:55 brief"],"cert_universe":CERT_UNIVERSE}
 rss_cache={"news":[],"last_fetch":None,"sources_checked":0}
+telegram_stats={"sent":0,"last_send":None,"last_error":None,"last_date":None}
 yfinance_available=False
 threads_started=False
 threads_lock=threading.Lock()
-telegram_stats={"sent":0,"last_send":None,"last_error":None}
+LAST_TELEGRAM_DATE=None
 
 try:
     import yfinance as yf
     yfinance_available=True
-    print(f"yfinance available - {len(CERT_UNIVERSE)} tickers", flush=True)
+    print(f"yfinance available {len(CERT_UNIVERSE)} tickers", flush=True)
 except Exception as e:
     print(f"yfinance not available {e}", flush=True)
 
@@ -71,25 +68,71 @@ def log_msg(msg):
     if len(last_scan["log"])>100:
         last_scan["log"]=last_scan["log"][-100:]
 
+def get_telegram_config():
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    return token, chat_id
+
+def is_morning_window_cet():
+    from datetime import timezone, timedelta
+    now_utc = datetime.now(timezone.utc)
+    cet = now_utc + timedelta(hours=2)
+    hour = cet.hour
+    minute = cet.minute
+    if MORNING_ONLY:
+        return (hour==MORNING_HOUR_START and minute>=50) or (hour==MORNING_HOUR_START+1 and minute<=15)
+    else:
+        return True
+
+def should_send_telegram_today():
+    global LAST_TELEGRAM_DATE
+    today = datetime.now().date().isoformat()
+    if LAST_TELEGRAM_DATE==today:
+        return False
+    if MORNING_ONLY and not is_morning_window_cet():
+        return False
+    return True
+
+def mark_telegram_sent():
+    global LAST_TELEGRAM_DATE
+    LAST_TELEGRAM_DATE=datetime.now().date().isoformat()
+    telegram_stats["last_date"]=LAST_TELEGRAM_DATE
+    try:
+        with open("last_telegram.txt","w") as f:
+            f.write(LAST_TELEGRAM_DATE)
+    except:
+        pass
+
+try:
+    if os.path.exists("last_telegram.txt"):
+        with open("last_telegram.txt") as f:
+            LAST_TELEGRAM_DATE=f.read().strip()
+            telegram_stats["last_date"]=LAST_TELEGRAM_DATE
+except:
+    pass
+
 def send_telegram(text):
     try:
-        if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-            log_msg(f"TELEGRAM SKIP (no token/chat_id) would send: {text[:80]}...")
+        token, chat_id = get_telegram_config()
+        if not token or not chat_id:
+            log_msg(f"TELEGRAM SKIP token={bool(token)} chat={bool(chat_id)} would send {text[:60]}")
+            telegram_stats["last_error"]=f"Missing token={bool(token)} chat={bool(chat_id)}"
             return False
-        url=f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        payload={"chat_id":TELEGRAM_CHAT_ID,"text":text,"parse_mode":"Markdown"}
+        url=f"https://api.telegram.org/bot{token}/sendMessage"
+        payload={"chat_id":chat_id,"text":text}
         r=requests.post(url, json=payload, timeout=10)
         if r.status_code==200:
             telegram_stats["sent"]+=1
             telegram_stats["last_send"]=datetime.now().isoformat()
-            log_msg(f"TELEGRAM SENT {text[:60]}...")
+            telegram_stats["last_error"]=None
+            log_msg(f"TELEGRAM SENT OK to {chat_id}")
             return True
         else:
-            telegram_stats["last_error"]=f"{r.status_code} {r.text[:100]}"
-            log_msg(f"TELEGRAM FAIL {r.status_code} {r.text[:100]}")
+            telegram_stats["last_error"]=f"{r.status_code} {r.text[:150]}"
+            log_msg(f"TELEGRAM FAIL {r.status_code} {r.text[:150]}")
             return False
     except Exception as e:
-        telegram_stats["last_error"]=str(e)[:100]
+        telegram_stats["last_error"]=str(e)[:200]
         log_msg(f"TELEGRAM ERROR {e}")
         return False
 
@@ -117,21 +160,15 @@ def safe_download(ticker):
                         last=vals[-1]
                         extra=[last + random.gauss(0, last*0.005) for _ in range(20-len(vals))]
                         vals = np.concatenate([np.array(extra, dtype=np.float32), vals.astype(np.float32)])
-                    log_msg(f"{ticker} REAL {float(vals[-1]):.2f}")
                     return np.array(vals, dtype=np.float32), True
         except Exception as e:
-            err=str(e)[:60]
-            log_msg(f"{ticker} YF fail {err} -> MOCK")
+            pass
     prices=mock_prices(ticker)
-    log_msg(f"{ticker} MOCK {prices[-1]:.2f}")
     return prices, False
 
 def fetch_multi_news():
-    """Scan many news sources for accuracy - 8 sources"""
     all_news=[]
     try:
-        # Mock multi-source with ticker-specific sentiment for V41
-        # In real prod, replace with feedparser requests to RSS
         templates=[
             ("Reuters","{} up on strong demand - analysts bullish"),
             ("DI","{} rusar efter rapport - över förväntan"),
@@ -144,11 +181,9 @@ def fetch_multi_news():
         ]
         for cert in CERT_UNIVERSE:
             ticker=cert["ticker"]
-            # Generate 2-4 news per ticker for accuracy
             for _ in range(random.randint(2,4)):
                 source, tmpl = random.choice(templates)
                 title = tmpl.format(cert["display"])
-                # Sentiment based on template keywords
                 sent=0
                 if "bullish" in title.lower() or "rusar" in title or "höjd" in title or "breaks" in title or "strong" in title:
                     sent=0.6 + random.random()*0.4
@@ -157,25 +192,13 @@ def fetch_multi_news():
                 else:
                     sent=random.gauss(0,0.3)
                 s_str='POS' if sent>0.25 else 'NEG' if sent<-0.25 else 'NEUTRAL'
-                all_news.append({
-                    "ticker":ticker,
-                    "name":cert["name"],
-                    "title":title,
-                    "source":source,
-                    "sentiment":float(sent),
-                    "sentiment_str":s_str,
-                    "sentiment_score":float(sent),
-                    "time":datetime.now().isoformat(),
-                    "display":cert["display"]
-                })
+                all_news.append({"ticker":ticker,"name":cert["name"],"title":title,"source":source,"sentiment":float(sent),"sentiment_str":s_str,"sentiment_score":float(sent),"time":datetime.now().isoformat(),"display":cert["display"]})
         random.shuffle(all_news)
         rss_cache["news"]=all_news
         rss_cache["last_fetch"]=datetime.now().isoformat()
         rss_cache["sources_checked"]=8
-        log_msg(f"NEWS SCAN {len(all_news)} headlines from 8 sources, {len(CERT_UNIVERSE)} tickers")
         return all_news
     except Exception as e:
-        log_msg(f"fetch_multi_news error {e}")
         return []
 
 def score_ticker(ticker, prices, news_list):
@@ -195,8 +218,6 @@ def score_ticker(ticker, prices, news_list):
         rs=avg_gain/avg_loss if avg_loss!=0 else 1
         rsi_val=100-(100/(1+rs))
         rsi_val=max(5,min(95,rsi_val))
-
-        # NEWS ACCURACY - scan many news for this ticker
         ticker_news=[n for n in news_list if n["ticker"]==ticker]
         news_score=0
         pos_count=0
@@ -207,13 +228,10 @@ def score_ticker(ticker, prices, news_list):
                 news_score+=s
                 if s>0.25: pos_count+=1
                 elif s<-0.25: neg_count+=1
-            news_score = news_score / len(ticker_news) * 3  # boost weight
-
-        # ACCURACY METRIC = how many sources agree
+            news_score = news_score / len(ticker_news) * 3
         total_news=len(ticker_news)
         agreement = max(pos_count, neg_count) / total_news if total_news>0 else 0
-        accuracy = agreement * min(total_news/3, 1.0)  # 0-1, higher = more sources agree
-
+        accuracy = agreement * min(total_news/3, 1.0)
         score100=50
         if ma5>ma20: score100+=10
         else: score100-=5
@@ -221,115 +239,85 @@ def score_ticker(ticker, prices, news_list):
         if 35<rsi_val<65: score100+=8
         elif rsi_val<30: score100+=12
         elif rsi_val>70: score100-=8
-
-        score100+=int(news_score*14)  # NEWS HEAVY
+        score100+=int(news_score*14)
         score100+=int(random.gauss(0,2))
         score100=max(5,min(95,int(score100)))
-
-        details={
-            "rsi":f"RSI {rsi_val:.0f}",
-            "trend":f"Trend {trend:+.1f}% MA5 {ma5:.1f} vs MA20 {ma20:.1f}",
-            "price":price,
-            "news_boost":float(news_score),
-            "score":score100/10.0,
-            "score100":score100,
-            "news_count":total_news,
-            "pos_news":pos_count,
-            "neg_news":neg_count,
-            "accuracy":round(accuracy,2),
-            "accuracy_str":f"{int(accuracy*100)}% ({pos_count} pos / {neg_count} neg av {total_news})"
-        }
+        details={"rsi":f"RSI {rsi_val:.0f}","trend":f"Trend {trend:+.1f}%","price":price,"news_boost":float(news_score),"score":score100/10.0,"score100":score100,"news_count":total_news,"pos_news":pos_count,"neg_news":neg_count,"accuracy":round(accuracy,2),"accuracy_str":f"{int(accuracy*100)}% ({pos_count} pos/{neg_count} neg av {total_news})"}
         return score100, details
     except Exception as e:
-        log_msg(f"score {ticker} err {e}")
         return 50, {"rsi":"RSI 50","trend":"0%","price":100,"news_boost":0,"score":5.0,"accuracy":0}
 
 def news_job():
-    log_msg(f"NEWS JOB START V41 {len(CERT_UNIVERSE)} tickers NO TRADE")
+    log_msg(f"NEWS JOB V42 MORNING ONLY={MORNING_ONLY} TRADING={TRADING_ENABLED} tickers={len(CERT_UNIVERSE)}")
     fetch_multi_news()
-
     while True:
         try:
-            log_msg(f"SCANNING {len(CERT_UNIVERSE)} tickers - multi news for accuracy")
+            from datetime import timezone, timedelta
+            now_utc = datetime.now(timezone.utc)
+            cet = now_utc + timedelta(hours=2)
+            log_msg(f"SCAN CET {cet.strftime('%H:%M')} morning={is_morning_window_cet()} should_send={should_send_telegram_today()} last={LAST_TELEGRAM_DATE}")
             news_list = fetch_multi_news()
             signals=[]
             telegram_queue=[]
-
             for cert in CERT_UNIVERSE:
                 try:
                     ticker=cert["ticker"]
                     prices, is_real = safe_download(ticker)
-                    if prices is None: continue
+                    if prices is None:
+                        continue
                     sc, det = score_ticker(ticker, prices, news_list)
                     ticker_news=[n for n in news_list if n["ticker"]==ticker][:5]
-                    signal={
-                        "ticker":ticker,
-                        "name":cert["name"],
-                        "display":cert["display"],
-                        "cat":cert["cat"],
-                        "price":float(prices[-1]),
-                        "is_real":is_real,
-                        "score":sc,
-                        "score10":sc/10.0,
-                        "details":det,
-                        "news":ticker_news,
-                        "accuracy":det.get("accuracy",0)
-                    }
+                    signal={"ticker":ticker,"name":cert["name"],"display":cert["display"],"cat":cert["cat"],"price":float(prices[-1]),"is_real":is_real,"score":sc,"score10":sc/10.0,"details":det,"news":ticker_news,"accuracy":det.get("accuracy",0)}
                     signals.append(signal)
-
-                    # TELEGRAM TRIGGER - high score OR high accuracy news
                     if sc>=int(SCORE_THRESHOLD*10) or sc<=int((10-SCORE_THRESHOLD)*10):
-                        # Strong signal
-                        direction = "BULL 🟢" if sc>=78 else "BEAR 🔴" if sc<=22 else "NEUTRAL"
-                        if det.get("accuracy",0)>=0.6 or abs(det.get("news_boost",0))>0.8:
+                        if det.get("accuracy",0)>=0.5 or abs(det.get("news_boost",0))>0.6:
                             telegram_queue.append(signal)
-
-                    time.sleep(0.5)  # rate limit
+                    time.sleep(0.5)
                 except Exception as e:
-                    log_msg(f"{cert['ticker']} scan err {e}")
+                    log_msg(f"{cert['ticker']} err {e}")
                     continue
-
             signals_sorted=sorted(signals, key=lambda x: (x["accuracy"], x["score"]), reverse=True)
             last_scan["signals"]=signals_sorted
             last_scan["news"]=news_list[:30]
             last_scan["time"]=datetime.now().isoformat()
-            last_scan["status"]=f"V41 NEWS LIVE {datetime.now().strftime('%H:%M:%S')} - {len(signals_sorted)} tickers, {len(news_list)} headlines, accuracy mode"
-
-            # SEND TELEGRAM for top triggers (max 3 per scan to avoid spam)
-            if telegram_queue:
-                # Sort by accuracy then score
-                telegram_queue_sorted=sorted(telegram_queue, key=lambda x: (x["accuracy"], abs(x["score"]-50)), reverse=True)[:3]
-                for sig in telegram_queue_sorted:
-                    try:
-                        det=sig["details"]
-                        news_titles="\n".join([f"• {n['source']}: {n['title'][:70]} ({n['sentiment_str']})" for n in sig["news"][:3]])
-                        text = (
-                            f"🚨 *{sig['display']} - Score {sig['score10']:.1f}/10*\n"
-                            f"{'🟢 BULL' if sig['score']>=78 else '🔴 BEAR' if sig['score']<=22 else '⚪'} {sig['cat']} | Pris {sig['price']:.2f} {'REAL' if sig['is_real'] else 'MOCK'}\n"
-                            f"📊 {det['rsi']} | {det['trend']}\n"
-                            f"📰 Accuracy {det['accuracy_str']} | News boost {det['news_boost']:+.2f}\n\n"
-                            f"{news_titles}\n\n"
-                            f"_V41 NEWS {datetime.now().strftime('%H:%M')} CET_"
-                        )
-                        send_telegram(text)
-                        time.sleep(1.2)  # avoid telegram rate limit
-                    except Exception as e:
-                        log_msg(f"telegram queue err {e}")
-
-            log_msg(f"SCAN KLART {len(signals_sorted)} tickers, {len(news_list)} news, telegram triggers {len(telegram_queue)}")
-            time.sleep(45)  # scan every 45s - more news, less rate limit
+            last_scan["status"]=f"V42 MORNING BRIEF LIVE {cet.strftime('%H:%M')} CET - {len(signals_sorted)} tickers"
+            if telegram_queue and should_send_telegram_today():
+                top=sorted(telegram_queue, key=lambda x: (x["accuracy"], abs(x["score"]-50)), reverse=True)[:5]
+                lines=[]
+                lines.append(f"MORGONBRIEF {cet.strftime('%Y-%m-%d')} 08:55 CET - {len(top)} starka signaler")
+                lines.append(f"Scanning {len(CERT_UNIVERSE)} tickers, {len(news_list)} nyheter")
+                lines.append("")
+                for i,sig in enumerate(top,1):
+                    det=sig["details"]
+                    direction="BULL" if sig["score"]>=78 else "BEAR" if sig["score"]<=22 else "NEUTRAL"
+                    lines.append(f"{i}. {sig['display']} {direction} Score {sig['score10']:.1f}/10 Acc {int(sig['accuracy']*100)}%")
+                    lines.append(f"   Pris {sig['price']:.2f} {det['rsi']} Boost {det['news_boost']:+.2f} {det['accuracy_str']}")
+                    if sig['news']:
+                        lines.append(f"   {sig['news'][0]['source']}: {sig['news'][0]['title'][:80]}")
+                    lines.append("")
+                if TRADING_ENABLED:
+                    lines.append(f"Auto-handel AKTIV - skulle oppna {min(len(top),4)} positioner nu")
+                else:
+                    lines.append("Trading AV - bara brief. Satt TRADING_ENABLED=true for auto-handel pa morgonen")
+                text="\n".join(lines)
+                if send_telegram(text):
+                    mark_telegram_sent()
+                    log_msg(f"MORNING BRIEF SENT {cet.date()}")
+            elif telegram_queue:
+                log_msg(f"TELEGRAM SUPPRESSED already sent {LAST_TELEGRAM_DATE}")
+            log_msg(f"SCAN KLART {len(signals_sorted)} tickers, next in 15 min")
+            time.sleep(900)
         except Exception as e:
             log_msg(f"news_job CRASH {e} {traceback.format_exc()[:400]}")
-            time.sleep(10)
+            time.sleep(60)
 
 def ensure_threads():
     global threads_started
     with threads_lock:
         if not threads_started:
-            log_msg("ensure_threads - starting V41 NEWS job")
             threading.Thread(target=news_job, daemon=True).start()
             threads_started=True
-            log_msg("V41 NEWS thread started - NO TRADE")
+            log_msg("V42 thread started MORNING BRIEF")
 
 @app.before_request
 def before_any_request():
@@ -338,19 +326,17 @@ def before_any_request():
 @app.route("/api/ping")
 def api_ping():
     ensure_threads()
-    return jsonify({"ok":True,"version":"V41 NEWS NO TRADE","tickers":len(CERT_UNIVERSE),"yfinance":yfinance_available,"threads":threads_started,"signals":len(last_scan.get("signals",[])),"news":len(rss_cache.get("news",[])),"telegram":telegram_stats,"threshold":SCORE_THRESHOLD,"time":datetime.now().isoformat()})
+    from datetime import timezone, timedelta
+    now_utc = datetime.now(timezone.utc)
+    cet = now_utc + timedelta(hours=2)
+    return jsonify({"ok":True,"version":"V42 MORNING BRIEF","tickers":len(CERT_UNIVERSE),"yfinance":yfinance_available,"threads":threads_started,"signals":len(last_scan.get("signals",[])),"news":len(rss_cache.get("news",[])),"telegram":telegram_stats,"threshold":SCORE_THRESHOLD,"morning_only":MORNING_ONLY,"trading_enabled":TRADING_ENABLED,"morning_window":f"{MORNING_HOUR_START}:50-{MORNING_HOUR_END}:15 CET","last_telegram_date":LAST_TELEGRAM_DATE,"is_morning_now":is_morning_window_cet(),"should_send_today":should_send_telegram_today(),"cet_now":cet.strftime("%H:%M %Y-%m-%d")})
 
 @app.route("/api/status")
 def api_status():
     ensure_threads()
     try:
         safe_scan={k: v for k,v in last_scan.items() if k in ["time","status","signals","news","log","cert_universe"]}
-        resp=make_response(jsonify({
-            "last_scan":safe_scan,
-            "rss_cache":{"news":rss_cache.get("news",[])[:40],"count":len(rss_cache.get("news",[])),"last_fetch":rss_cache.get("last_fetch")},
-            "telegram":telegram_stats,
-            "config":{"tickers":len(CERT_UNIVERSE),"version":"V41 NEWS NO TRADE","threshold":SCORE_THRESHOLD,"mode":"NEWS ONLY NO TRADE"}
-        }))
+        resp=make_response(jsonify({"last_scan":safe_scan,"rss_cache":{"news":rss_cache.get("news",[])[:40],"count":len(rss_cache.get("news",[])),"last_fetch":rss_cache.get("last_fetch")},"telegram":telegram_stats,"config":{"tickers":len(CERT_UNIVERSE),"version":"V42 MORNING BRIEF","threshold":SCORE_THRESHOLD,"morning_only":MORNING_ONLY,"trading_enabled":TRADING_ENABLED}}))
         resp.headers['Cache-Control']='no-store'
         return resp
     except Exception as e:
@@ -359,30 +345,34 @@ def api_status():
 @app.route("/api/debug")
 def api_debug():
     ensure_threads()
-    return jsonify({"last_scan":last_scan,"rss_cache":rss_cache,"telegram":telegram_stats,"version":"V41"})
+    return jsonify({"last_scan":last_scan,"rss_cache":rss_cache,"telegram":telegram_stats,"version":"V42"})
 
 @app.route("/api/telegram/test")
 def api_telegram_test():
     ensure_threads()
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return jsonify({"ok":False,"error":"Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID env vars in Render","token_set":bool(TELEGRAM_TOKEN),"chat_set":bool(TELEGRAM_CHAT_ID)})
-    ok=send_telegram(f"✅ V41 NEWS TEST - {len(CERT_UNIVERSE)} tickers live, {len(last_scan.get('signals',[]))} signals, {len(rss_cache.get('news',[]))} news headlines. SAAB, NVDA, GULD, OLJA m.fl bevakas. Score threshold {SCORE_THRESHOLD}/10")
+    token, chat_id = get_telegram_config()
+    if not token or not chat_id:
+        return jsonify({"ok":False,"error":"Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID","token_len":len(token),"chat_len":len(chat_id)})
+    ok=send_telegram(f"V42 TEST - {len(CERT_UNIVERSE)} tickers, morning_only={MORNING_ONLY}, trading={TRADING_ENABLED}. Brief kommer bara 08:55 CET en gang per dag.")
     return jsonify({"ok":ok,"telegram":telegram_stats})
 
-@app.route("/api/telegram/config", methods=["GET","POST"])
+@app.route("/api/telegram/config")
 def api_telegram_config():
     ensure_threads()
-    if request.method=="POST":
-        data=request.get_json() or {}
-        # This endpoint is just info - real config via env vars
-        return jsonify({"message":"Set env vars in Render Dashboard: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID","received":data})
-    return jsonify({
-        "telegram_token_set":bool(TELEGRAM_TOKEN),
-        "chat_id_set":bool(TELEGRAM_CHAT_ID),
-        "stats":telegram_stats,
-        "threshold":SCORE_THRESHOLD,
-        "how_to":"1. Skapa bot via @BotFather på Telegram -> /newbot -> få token. 2. Starta chat med din bot, skicka ett meddelande. 3. Hämta chat_id via https://api.telegram.org/bot<TOKEN>/getUpdates. 4. Lägg till TELEGRAM_BOT_TOKEN och TELEGRAM_CHAT_ID i Render Environment Variables."
-    })
+    token, chat_id = get_telegram_config()
+    return jsonify({"token_len":len(token),"chat_id":chat_id,"token_set":bool(token),"chat_set":bool(chat_id),"stats":telegram_stats,"threshold":SCORE_THRESHOLD,"morning_only":MORNING_ONLY,"trading_enabled":TRADING_ENABLED,"last_date":LAST_TELEGRAM_DATE,"how_to":"Set env vars TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Render, then RESTART. Morning brief 08:50-09:15 CET once per day."})
+
+@app.route("/api/telegram/reset")
+def api_telegram_reset():
+    global LAST_TELEGRAM_DATE
+    LAST_TELEGRAM_DATE=None
+    try:
+        if os.path.exists("last_telegram.txt"):
+            os.remove("last_telegram.txt")
+    except:
+        pass
+    log_msg("LAST_TELEGRAM_DATE RESET - next scan will send again")
+    return jsonify({"ok":True,"last_date":LAST_TELEGRAM_DATE})
 
 @app.route("/")
 def index():
