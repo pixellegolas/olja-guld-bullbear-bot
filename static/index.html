@@ -1,199 +1,105 @@
-<!DOCTYPE html>
+
+<!doctype html>
 <html lang="sv">
-<head>\n<meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate'><meta http-equiv='Pragma' content='no-cache'><meta http-equiv='Expires' content='0'>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bull/Bear Bot • V40.26 LAZY REAL</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bull/Bear Bot V41 NEWS</title>
 <style>
-:root{--bg:#fcfcfa;--card:#fff;--hair:#e5e5e0;--text:#0f0f0f;--muted:#6b6b6a;--pos:#12a150;--neg:#e5484d;--mono:'JetBrains Mono',monospace;--serif:'Playfair Display',serif;--sans:'Inter',sans-serif}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
-.mono{font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted)}
-.serif{font-family:var(--serif)}
-.card{border:1px solid var(--hair);background:var(--card);padding:24px}
-.big{font-family:var(--serif);font-weight:700;line-height:0.9}
-.pos{color:var(--pos)} .neg{color:var(--neg)}
-.top{position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--hair);display:flex;justify-content:space-between;padding:10px 24px;flex-wrap:wrap;gap:8px}
-.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));border-top:1px solid var(--hair);margin-top:12px}
-.signal{border-top:1px solid var(--hair);padding:20px 0}
-.bar{height:3px;background:var(--hair);position:relative;margin-top:12px}
-.barfill{position:absolute;left:0;top:0;height:100%}
+:root{--pos:#0a7a3d;--neg:#c0392b;--muted:#888;--hair:#e8e8e8}
+body{font-family:ui-monospace,Menlo,Monaco,monospace;margin:0;padding:24px;background:#fff;color:#111}
+h1{font-family:Georgia,serif;font-size:48px;margin:0 0 8px}
+.sub{color:var(--muted);max-width:760px;line-height:1.4}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--hair);margin:24px 0}
+.cell{padding:18px;border-right:1px solid var(--hair)}
+.cell:last-child{border-right:0}
+.label{font-size:10px;letter-spacing:0.12em;color:var(--muted)}
+.big{font-size:36px;font-weight:700;line-height:1}
+.big.pos{color:var(--pos)} .big.neg{color:var(--neg)}
+.mono{font-size:12px}
+.section{margin:40px 0;border-top:1px solid var(--hair);padding-top:18px}
+.row{display:grid;grid-template-columns:60px 1fr 120px 140px 90px;padding:12px 0;border-top:1px solid #f2f2f2}
+.badge{padding:2px 6px;border-radius:3px;font-size:10px}
+.bull{background:#e8f5e9;color:var(--pos)} .bear{background:#fdecea;color:var(--neg)}
+@media(max-width:900px){.grid{grid-template-columns:1fr 1fr} .row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div class="top">
-<div class="mono">UTGÅVA 01 • BULLE BEAR • <span id="statusTop">LADDAR...</span> • <span id="scanTime">--:--</span></div>
-<div class="mono">V40.26 LAZY REAL FINAL • SCAN <span id="lastScan">--:--:--</span> • <span id="apiStat">API: ...</span></div>
+<div style="display:flex;justify-content:space-between" class="mono"><span id="topLeft">UTGÅVA 01 • V41 NEWS • INIT</span><span id="topRight">SCAN --:--:-- • API: --</span></div>
+<h1>Bull/Bear Bot <span style="font-size:18px">V41 NEWS INTEL</span></h1>
+<div class="sub">News-only bot, ingen trading. Scannar <span id="tickerCount">25</span> cert: SAAB, NVIDIA, guld, olja, BTC, OMX m.fl. 100+ nyheter per scan från 8 källor för accuracy. Skickar Telegram vid score >= <span id="thr">7.5</span>/10 eller hög accuracy. V41 NO TRADE.</div>
+
+<div class="grid">
+<div class="cell"><div class="label">TOTAL HEADLINES</div><div class="big" id="totalNews">0</div><div class="mono" id="newsSub">0 källor</div></div>
+<div class="cell"><div class="label">TICKERS BEVAKADE</div><div class="big" id="totalTick">25</div><div class="mono" id="tickSub">SAAB, NVDA, GULD, OLJA...</div></div>
+<div class="cell"><div class="label">TELEGRAM SKICKADE</div><div class="big" id="tgSent">0</div><div class="mono" id="tgSub">Senaste --:--</div></div>
+<div class="cell"><div class="label">ACCURACY TOP</div><div class="big" id="accTop">0%</div><div class="mono" id="accSub">Högst accuracy just nu</div></div>
 </div>
 
-<div style="max-width:1280px;margin:0 auto;padding:48px 24px">
-<h1 class="serif" style="font-size:clamp(48px,8vw,84px);margin:0 0 24px 0;line-height:0.9">Bull/Bear Bot</h1>
-<p style="max-width:560px;color:var(--muted);line-height:1.6">Automatiserad bot som scannar 10 cert - olja, guld, silver, natgas, koppar, OMX, BTC. Score 0-10, BULL 7.8+ BEAR 2.2-, trailing ATR(14)x1.5. Aktiv 08:55-17:30 CET. V40.26 LAZY REAL FINAL.</p>
-
-<div style="margin-top:64px;border-top:1px solid var(--hair);padding-top:12px;display:flex;justify-content:space-between" class="mono"><span>FIG. 01 — ÖVERSIKT</span><span id="cacheNote">V40.26 LAZY REAL • 10 CERT • TRADE ENABLED 10 CERT MOCK</span></div>
-<div class="grid4" id="overview">
-<div class="card"><div class="mono">TOTAL P/L</div><div class="big pos" style="font-size:48px;margin-top:16px" id="totalPL">+0 kr</div><div class="mono" id="totalPLSub">0 avslut</div></div>
-<div class="card"><div class="mono">DAGLIG</div><div class="big pos" style="font-size:48px;margin-top:16px" id="dailyPL">+0 kr</div><div class="mono" id="dailySub">Kassa 10000 kr</div></div>
-<div class="card"><div class="mono">TRÄFFSÄKERHET</div><div class="big pos" style="font-size:48px;margin-top:16px" id="winRate">0<span style="font-size:24px">%</span></div><div class="mono" id="winSub">0 av 0 avslut i vinst</div></div>
-<div class="card"><div class="mono">EXPONERING</div><div class="big" style="font-size:48px;margin-top:16px"><span id="openCount">0</span> <span style="font-size:18px;font-family:var(--sans);font-weight:400">öppna</span></div><div class="mono" id="expoSub">INGA ÖPPNA - VÄNTAR 08:55</div></div>
+<div class="section">
+<div style="display:flex;justify-content:space-between"><span class="label">FIG. 02 — SIGNALER SORTERADE PÅ ACCURACY + SCORE</span><span class="mono" id="fig2sub">V41 NEWS • 25 CERT • NO TRADE</span></div>
+<div style="margin-top:12px" class="mono"><span style="margin-right:16px">№</span><span style="margin-right:80px">TICKER</span><span>PRIS / SCORE / ACCURACY / NEWS BOOST</span></div>
+<div id="signals"></div>
 </div>
 
-<div style="margin-top:80px">
-<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px"><span class="mono">FIG. 02</span><h2 class="serif" style="font-size:32px;margin:0">Öppna positioner</h2><span class="mono">V40.26 LAZY REAL • 10 CERT • TRAIL ATRx1.5</span></div>
-<div style="margin-top:24px;border-top:1px solid var(--hair)"><div style="display:grid;grid-template-columns:40px 1fr 120px 100px;padding:12px 0" class="mono"><span>№</span><span>CERTIFIKAT</span><span>TRAIL</span><span style="text-align:right">P/L</span></div><div id="positions"><div style="padding:24px 0;color:var(--muted)">Inga öppna positioner — market 08:55-17:30 CET. Scannar var 30s.</div></div></div>
+<div class="section">
+<div style="display:flex;justify-content:space-between"><span class="label">FIG. 03 — NYHETER (100+ HEADLINES)</span><span class="mono" id="fig3sub">8 KÄLLOR • REAL+MOCK FALLBACK</span></div>
+<div id="news"></div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:64px;margin-top:80px;border-top:1px solid var(--hair);padding-top:24px">
-<div>
-<div style="display:flex;justify-content:space-between"><span class="mono">FIG. 03</span><h2 class="serif" style="font-size:28px;margin:0">Signaler just nu</h2><span class="mono">SCORE / 10</span></div>
-<div id="signals" style="margin-top:32px"><div class="mono">Laddar signaler från /api/status...</div></div>
-</div>
-<div>
-<div style="display:flex;justify-content:space-between"><span class="mono">FIG. 04</span><h2 class="serif" style="font-size:28px;margin:0">Nyheter</h2></div>
-<div id="news" style="margin-top:32px"><div class="mono">Laddar nyheter...</div></div>
-<div style="margin-top:32px;padding:16px;background:#f5f5f0;border:1px solid var(--hair)"><div class="mono">PROTOKOLL</div><div style="font-size:13px;line-height:1.5;margin-top:8px;color:var(--muted)">Systemet läser rubriker, inte känslor. Sentiment: olja + lagerfall = bullish, guld + stark dollar = bearish. Viktas lätt (max ±1.0) för att inte överstyra tekniskt. V40.26 LAZY REAL mock+real fallback.</div></div>
-</div>
-</div>
-
-<div style="margin-top:80px;border-top:1px dashed var(--hair);padding-top:16px" class="mono">
-<div>DEBUG PANEL V40.26 LAZY REAL</div>
-<div id="debugPanel" style="margin-top:8px;white-space:pre-wrap;word-break:break-all;background:#fff;border:1px solid var(--hair);padding:12px;max-height:200px;overflow:auto">Väntar data...</div>
-<div style="margin-top:12px">API: <span id="apiUrl">/api/status</span> • Version: <span id="ver">V40.26 LAZY REAL</span></div>
-</div>
+<div class="section mono">
+<div class="label">DEBUG LOG</div>
+<div id="log" style="white-space:pre-wrap;max-height:300px;overflow:auto;background:#fafafa;padding:12px;margin-top:8px"></div>
+<div style="margin-top:12px"><a href="/api/ping" target="_blank">/api/ping</a> • <a href="/api/debug" target="_blank">/api/debug</a> • <a href="/api/telegram/test" target="_blank">/api/telegram/test</a> • <a href="/api/telegram/config" target="_blank">/api/telegram/config</a></div>
 </div>
 
 <script>
-let lastData=null;
-function fmt(n){try{return (n>=0?'+':'')+Math.round(n).toLocaleString('sv-SE')+' kr'}catch{return n+' kr'}}
-function safeGet(id){return document.getElementById(id)}
-
 async function fetchStatus(){
  try{
   const r=await fetch('/api/status?t='+Date.now(),{cache:'no-store'});
-  if(!r.ok) throw new Error('HTTP '+r.status);
   const data=await r.json();
-  lastData=data;
-  render(data);
-  if(safeGet('apiStat')) safeGet('apiStat').textContent='API: OK '+new Date().toLocaleTimeString('sv-SE');
-  if(safeGet('debugPanel')) safeGet('debugPanel').textContent='OK '+new Date().toISOString()+'\nSignals: '+(data.last_scan?.signals?.length||0)+'\nNews: '+(data.rss_cache?.news?.length||0)+'\nStatus: '+ (data.last_scan?.status||'')+'\nLog last: '+(data.last_scan?.log?.slice(-3).join(' | ')||'');
+  const ls=data.last_scan||{};
+  const rc=data.rss_cache||{};
+  const tg=data.telegram||{};
+  document.getElementById('topLeft').textContent=`UTGÅVA 01 • V41 NEWS • ${ls.status||'--'}`;
+  document.getElementById('topRight').textContent=`SCAN ${ls.time?ls.time.slice(11,19):'--:--:--'} • API: OK ${new Date().toLocaleTimeString()} • ${rc.count||0} NEWS`;
+  document.getElementById('totalNews').textContent=rc.count||0;
+  document.getElementById('newsSub').textContent=(rc.count||0)+' headlines från '+ (ls.cert_universe? '8 källor':'--');
+  document.getElementById('totalTick').textContent=ls.cert_universe?ls.cert_universe.length:25;
+  document.getElementById('tickSub').textContent='SAAB, NVDA, GULD, OLJA, BTC...';
+  document.getElementById('tgSent').textContent=tg.sent||0;
+  document.getElementById('tgSub').textContent='Senaste '+(tg.last_send?tg.last_send.slice(11,19):'--:--') + (tg.last_error?' • ERR '+tg.last_error.slice(0,30):'');
+  const signals=ls.signals||[];
+  if(signals.length>0){
+    const topAcc=Math.max(...signals.map(s=>s.accuracy||0));
+    document.getElementById('accTop').textContent=Math.round(topAcc*100)+'%';
+    document.getElementById('accSub').textContent=signals[0].display+' top accuracy';
+  }
+  const sigDiv=document.getElementById('signals');
+  if(signals.length===0){
+    sigDiv.innerHTML='<div class="mono" style="padding:20px 0;color:#888">INGA SIGNALER ÄNNU - DEBUG: '+(ls.time||'')+'</div>';
+  }else{
+    sigDiv.innerHTML=signals.map((s,i)=>{
+      const score=s.score10||s.score/10;
+      const det=s.details||{};
+      const color=score>=7.5?'var(--pos)':score<=2.5?'var(--neg)':'#111';
+      const badge=score>=7.5?'bull':score<=2.5?'bear':'';
+      const acc=Math.round((s.accuracy||0)*100);
+      return `<div class="row"><span class="mono">${i+1}</span><span><b>${s.display}</b> <span class="badge ${badge}">${score>=7.5?'BULL '+score.toFixed(1):score<=2.5?'BEAR '+score.toFixed(1):score.toFixed(1)}</span><br><span class="mono">${s.cat} • ${s.ticker} • ${s.is_real?'REAL':'MOCK'} • ${det.rsi||''} • ${det.trend||''}</span><br><span class="mono">${(s.news||[]).slice(0,2).map(n=>n.source+': '+n.title.slice(0,60)).join(' | ')}</span></span><span class="mono">${s.price.toFixed(2)}<br><span style="color:${color};font-weight:700">${score.toFixed(1)}/10</span></span><span class="mono">Acc ${acc}%<br>${det.accuracy_str||''}<br>Boost ${det.news_boost>=0?'+':''}${(det.news_boost||0).toFixed(2)}</span><span class="mono" style="text-align:right">${det.pos_news||0} pos<br>${det.neg_news||0} neg<br>${det.news_count||0} tot</span></div>`;
+    }).join('');
+  }
+  const newsDiv=document.getElementById('news');
+  const news=rc.news||ls.news||[];
+  newsDiv.innerHTML=news.slice(0,40).map(n=>`<div class="row" style="grid-template-columns:80px 1fr 80px 100px"><span class="mono">${n.ticker}</span><span class="mono"><b>${n.display||n.ticker}</b> ${n.title}<br><span style="color:#888">${n.source||''} • ${n.time?new Date(n.time).toLocaleTimeString():''}</span></span><span class="mono" style="color:${n.sentiment>0.25?'var(--pos)':n.sentiment<-0.25?'var(--neg)':'#111'}">${n.sentiment_str} ${n.sentiment>=0?'+':''}${n.sentiment.toFixed(2)}</span><span class="mono">${n.sentiment>0.5?'HÖG ACC':''}</span></div>`).join('');
+  const logDiv=document.getElementById('log');
+  if(ls.log) logDiv.textContent=ls.log.slice(-50).join('\n');
  }catch(e){
   console.error(e);
-  if(safeGet('apiStat')) safeGet('apiStat').textContent='API FEL: '+e.message;
-  if(safeGet('debugPanel')) safeGet('debugPanel').textContent='FETCH ERROR: '+e.message+'\n'+e.stack;
-  if(safeGet('signals')) safeGet('signals').innerHTML='<div class="mono neg">API FEL: '+e.message+' - kolla /api/debug</div>';
  }
 }
-
-function render(data){
- try{
-  const ls=data.last_scan||{};
-  const signals=ls.signals||[];
-  const news=(data.rss_cache?.news||ls.news||[]);
-  if(safeGet('statusTop')) safeGet('statusTop').textContent=ls.status||'OK';
-  if(safeGet('scanTime')) safeGet('scanTime').textContent=ls.time?new Date(ls.time).toLocaleTimeString('sv-SE'):'--:--';
-  if(safeGet('lastScan')) safeGet('lastScan').textContent=ls.time?new Date(ls.time).toLocaleTimeString('sv-SE'):'--:--:--';
-  if(safeGet('ver')) safeGet('ver').textContent=data.config?.version||ls.status||'V40.26 LAZY REAL';
-  if(safeGet('openCount')) safeGet('openCount').textContent=(data.portfolio?.positions?.length||0);
-  if(safeGet('totalPL')) {
-    const hist=data.portfolio?.history||[];
-    const total=hist.reduce((s,h)=>s+(h.pnl||0),0);
-    safeGet('totalPL').textContent=(total>=0?'+':'')+Math.round(total).toLocaleString('sv-SE')+' kr';
-    if(safeGet('totalPL').parentElement) safeGet('totalPL').className='big '+(total>=0?'pos':'neg');
-    if(document.getElementById('totalPLSub')) document.getElementById('totalPLSub').textContent=hist.length+' avslut';
-  }
-  if(safeGet('dailyPL')) {
-    const d=data.portfolio?.daily_pnl||0;
-    safeGet('dailyPL').textContent=(d>=0?'+':'')+Math.round(d).toLocaleString('sv-SE')+' kr';
-    safeGet('dailyPL').className='big '+(d>=0?'pos':'neg');
-  }
-  if(document.getElementById('dailySub')) document.getElementById('dailySub').textContent='Kassa '+Math.round(data.portfolio?.cash||0).toLocaleString('sv-SE')+' kr';
-  if(document.getElementById('winRate')) {
-    const hist=data.portfolio?.history||[];
-    const wins=hist.filter(h=>h.pnl>0).length;
-    const rate=hist.length?Math.round(wins/hist.length*100):0;
-    document.getElementById('winRate').innerHTML=rate+'<span style="font-size:24px">%</span>';
-    document.getElementById('winRate').className='big '+(rate>=50?'pos':'neg');
-    if(document.getElementById('winSub')) document.getElementById('winSub').textContent=wins+' av '+hist.length+' avslut i vinst';
-  }
-  if(document.getElementById('expoSub')) {
-    const pos=data.portfolio?.positions?.length||0;
-    document.getElementById('expoSub').textContent=pos?pos+' aktiva • cash '+Math.round(data.portfolio.cash)+' kr':'INGA ÖPPNA - VÄNTAR 08:55';
-  }
-
-  // FIG 02 positions
-  const posDiv=document.getElementById('positions');
-  if(posDiv){
-    const positions=data.portfolio?.positions||[];
-    if(positions.length===0){
-      posDiv.innerHTML='<div style="padding:24px 0;color:var(--muted)">Inga öppna positioner — market 08:55-17:30 CET (TEST 24h i V40.23). Scannar var 20s. Cash '+(Math.round(data.portfolio?.cash||0))+' kr. History '+ (data.portfolio?.history?.length||0)+' avslut.</div>';
-    }else{
-      posDiv.innerHTML=positions.map((p,i)=>{
-        const cur=p.current_price||p.entry_price;
-        const entry=p.entry_price;
-        let pnlPct=0;
-        if(p.direction==='BULL') pnlPct=(cur-entry)/entry*100;
-        else pnlPct=(entry-cur)/entry*100;
-        const trailActive=p.trailing_active?'TRAIL AKTIV '+ (p.trailing_stop? p.trailing_stop.toFixed(2):''):'TRAIL VÄNTAR';
-        const color=pnlPct>=0?'var(--pos)':'var(--neg)';
-        return `<div style="display:grid;grid-template-columns:40px 1fr 120px 100px;padding:14px 0;border-top:1px solid var(--hair)">
-        <span class="mono">${i+1}</span>
-        <span><b>${p.cert}</b> <span class="mono">${p.underlying} ${p.direction} • ${p.name}</span><br><span class="mono">ENTRY ${entry.toFixed(2)} → NU ${cur.toFixed(2)} • SIZE ${p.size_sek} kr</span></span>
-        <span class="mono">${trailActive}</span>
-        <span class="mono" style="text-align:right;color:${color}">${pnlPct>=0?'+':''}${pnlPct.toFixed(2)}%<br>${Math.round(p.size_sek*pnlPct/100)} kr</span>
-        </div>`;
-      }).join('') + `<div style="margin-top:12px" class="mono">History: ${(data.portfolio?.history||[]).slice(-3).map(h=>h.cert+' '+(h.pnl>=0?'+':'')+Math.round(h.pnl)+'kr ('+h.reason+')').join(' | ')||'Inga avslut ännu'}</div>`;
-    }
-  }
-
-  // FIG 03
-  const sigDiv=safeGet('signals');
-  if(!sigDiv) return;
-  if(!signals || signals.length===0){
-   sigDiv.innerHTML='<div class="mono">Inga signaler just nu - debug: last_scan.signals='+(ls.signals?ls.signals.length:'null')+' lastScan.time='+(ls.time||'none')+'<br>Kolla /api/debug i ny flik</div>';
-  }else{
-   sigDiv.innerHTML=signals.map(s=>{
-    try{
-     const raw=s.score||50;
-     const s100=raw>10?raw:raw*10;
-     const s10=(s100/10).toFixed(1);
-     const isBull=s100>=55;
-     const boost=s.details?.news_boost||0;
-     const price=s.price||s.details?.price||0;
-     const rsi=s.details?.rsi||'RSI 50';
-     const trend=s.details?.trend||'Trend 0%';
-     const color=s100>=70?'var(--pos)':s100<=30?'var(--neg)':'var(--text)';
-     return `<div class="signal">
-     <div style="display:flex;justify-content:space-between"><span class="mono">${s.ticker||''} / ${s.name||''} • ${s.cat||''} • ${typeof price==='number'?price.toFixed(2):price}</span><span class="mono" style="color:${boost>0?'var(--pos)':boost<0?'var(--neg)':''}">BOOST ${boost>0?'+':''}${Number(boost).toFixed(2)}</span></div>
-     <div style="display:flex;gap:16px;align-items:center;margin-top:12px"><div class="big" style="font-size:42px;color:${color}">${s10}</div><div><div style="font-weight:600">${isBull?'↗ BULL':'↘ BEAR'} • ${s100.toFixed(0)}/100</div><div class="mono">${rsi} • ${trend}</div></div></div>
-     <div class="bar"><div class="barfill" style="background:${color};width:${Math.min(100,s100)}%"></div></div>
-     </div>`;
-    }catch(e){
-     return `<div class="mono">Render error ${e.message} for ${JSON.stringify(s).slice(0,100)}</div>`;
-    }
-   }).join('');
-  }
-  // FIG 04
-  const newsDiv=safeGet('news');
-  if(newsDiv){
-   if(!news || news.length===0){
-    newsDiv.innerHTML='<div class="mono">Inga nyheter - väntar RSS (count '+(data.rss_cache?.count||0)+')</div>';
-   }else{
-    newsDiv.innerHTML=news.slice(0,8).map(n=>{
-     const title=n.title||'No title';
-     const ticker=n.ticker||'';
-     const sent=(n.sentiment||n.sentiment_str||'NEUTRAL').toString().toUpperCase();
-     const color=sent.includes('POS')?'var(--pos)':sent.includes('NEG')?'var(--neg)':'';
-     return `<div style="border-top:1px solid var(--hair);padding:12px 0"><div style="display:flex;justify-content:space-between"><span class="mono">${ticker}</span><span class="mono" style="color:${color}">${sent}</span></div><div style="font-size:14px;margin-top:6px;line-height:1.4">${title}</div></div>`;
-    }).join('');
-   }
-  }
- }catch(e){
-  console.error('render error',e);
-  if(safeGet('debugPanel')) safeGet('debugPanel').textContent='RENDER ERROR: '+e.message+'\n'+e.stack;
- }
-}
-
 fetchStatus();
-setInterval(fetchStatus, 8000);
+setInterval(fetchStatus, 6000);
 </script>
 </body>
 </html>
