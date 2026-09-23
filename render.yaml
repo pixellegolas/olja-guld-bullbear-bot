@@ -1,1 +1,13 @@
-services:\n  - type: web\n    name: bot2_olja_guld_v4\n    env: python\n    buildCommand: pip install -r requirements.txt\n    startCommand: gunicorn app:app\n
+services:
+  - type: web
+    name: bullbear-v41-news
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --config gunicorn.conf.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: SCORE_THRESHOLD
+        value: 7.5
